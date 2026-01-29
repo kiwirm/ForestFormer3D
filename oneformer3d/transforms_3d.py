@@ -297,6 +297,46 @@ class PointInstClassMapping_(BaseTransform):
 
         return input_dict
 
+
+@TRANSFORMS.register_module()
+class PointInstOnlyMapping_(BaseTransform):
+    """Instance-only mapping from pts_instance_mask.
+
+    - Treats instance id 0 as background.
+    - Remaps valid instance ids to contiguous [0..N-1].
+    - Sets gt_labels_3d to zeros (single class).
+    """
+
+    def transform(self, input_dict):
+        pts_instance_mask = torch.tensor(input_dict['pts_instance_mask'])
+
+        # Treat 0 as background for instance-only setting
+        pts_instance_mask = pts_instance_mask.clone()
+        pts_instance_mask[pts_instance_mask == 0] = -1
+
+        valid = pts_instance_mask != -1
+        if valid.any():
+            unique_ids = torch.unique(pts_instance_mask[valid])
+            new_ids = torch.arange(len(unique_ids), device=pts_instance_mask.device)
+            remapped = pts_instance_mask.clone()
+            for old_id, new_id in zip(unique_ids, new_ids):
+                remapped[pts_instance_mask == old_id] = new_id
+            remapped[~valid] = -1
+            pts_instance_mask = remapped
+        else:
+            unique_ids = torch.tensor([], device=pts_instance_mask.device, dtype=torch.long)
+
+        input_dict['pts_instance_mask'] = pts_instance_mask.numpy()
+
+        # Single-class labels for each instance
+        gt_labels = torch.zeros(len(unique_ids), dtype=torch.long, device=pts_instance_mask.device)
+        input_dict['gt_labels_3d'] = gt_labels.cpu().numpy()
+
+        if 'eval_ann_info' in input_dict.keys():
+            input_dict['eval_ann_info']['pts_instance_mask'] = pts_instance_mask.numpy()
+
+        return input_dict
+
 @TRANSFORMS.register_module()
 class PointSample_(PointSample):
 

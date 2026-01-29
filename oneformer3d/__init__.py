@@ -1,7 +1,7 @@
 from .oneformer3d import (
     ForAINetV2OneFormer3D, ForAINetV2OneFormer3D_XAwarequery)
+from .oneformer3d_speedup_v1 import InstanceOnlyOneFormer3D
 from .spconv_unet import SpConvUNet
-from .mink_unet import Res16UNet34C
 from .query_decoder import ScanNetQueryDecoder, QueryDecoder, ForAINetv2QueryDecoder, ForAINetv2QueryDecoder_XAwarequery
 from .unified_criterion import (
     ScanNetUnifiedCriterion, ForAINetv2UnifiedCriterion)
@@ -13,7 +13,8 @@ from .instance_criterion import (
 from .loading import LoadAnnotations3D_, NormalizePointsColor_
 from .formatting import Pack3DDetInputs_
 from .transforms_3d import (
-    ElasticTransfrom, AddSuperPointAnnotations, SwapChairAndFloor, PointSample_)
+    ElasticTransfrom, AddSuperPointAnnotations, SwapChairAndFloor, PointSample_,
+    PointInstOnlyMapping_)
 from .data_preprocessor import Det3DDataPreprocessor_
 from .unified_metric import UnifiedSegMetric
 from .structures import InstanceData_

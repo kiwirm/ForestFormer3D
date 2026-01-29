@@ -1,3 +1,8 @@
 # Ignore Python bytecode
 *.pyc
 __pycache__/
+
+# Data (keep only placeholders/docs if needed)
+data/*
+!data/.gitkeep
+!data/README.md

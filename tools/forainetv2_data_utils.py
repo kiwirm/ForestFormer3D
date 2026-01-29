@@ -17,7 +17,7 @@ class ForAINetV2Data(object):
         save_path (str, optional): Output directory.
     """
 
-    def __init__(self, root_path, split='train', save_path=None):
+    def __init__(self, root_path, split='train', save_path=None, split_prefix=None):
         self.root_dir = root_path
         self.save_path = root_path if save_path is None else save_path
         self.split = split
@@ -37,8 +37,10 @@ class ForAINetV2Data(object):
             for i, treeid in enumerate(list(self.cat_ids))
         }
         assert split in ['train', 'val', 'test']
-        split_file = osp.join(self.root_dir, 'meta_data',
-                              f'{split}_list.txt')
+        split_name = f'{split}_list.txt'
+        if split_prefix:
+            split_name = f'{split_prefix}_{split}_list.txt'
+        split_file = osp.join(self.root_dir, 'splits', split_name)
         mmengine.check_file_exist(split_file)
         self.sample_id_list = mmengine.list_from_file(split_file)
         self.test_mode = (split == 'test')
@@ -47,19 +49,19 @@ class ForAINetV2Data(object):
         return len(self.sample_id_list)
 
     def get_aligned_box_label(self, idx):
-        box_file = osp.join(self.root_dir, 'forainetv2_instance_data',
+        box_file = osp.join(self.root_dir, 'derived', 'forainetv2_instance_data',
                             f'{idx}_aligned_bbox.npy')
         mmengine.check_file_exist(box_file)
         return np.load(box_file)
 
     def get_unaligned_box_label(self, idx):
-        box_file = osp.join(self.root_dir, 'forainetv2_instance_data',
+        box_file = osp.join(self.root_dir, 'derived', 'forainetv2_instance_data',
                             f'{idx}_unaligned_bbox.npy')
         mmengine.check_file_exist(box_file)
         return np.load(box_file)
 
     def get_axis_align_matrix(self, idx):
-        matrix_file = osp.join(self.root_dir, 'forainetv2_instance_data',
+        matrix_file = osp.join(self.root_dir, 'derived', 'forainetv2_instance_data',
                                f'{idx}_axis_align_matrix.npy')
         mmengine.check_file_exist(matrix_file)
         return np.load(matrix_file)
@@ -86,13 +88,13 @@ class ForAINetV2Data(object):
             info = dict()
             pc_info = {'num_features': 3, 'lidar_idx': sample_idx}
             info['point_cloud'] = pc_info
-            pts_filename = osp.join(self.root_dir, 'forainetv2_instance_data',
+            pts_filename = osp.join(self.root_dir, 'derived', 'forainetv2_instance_data',
                                     f'{sample_idx}_vert.npy')
             points = np.load(pts_filename)
-            mmengine.mkdir_or_exist(osp.join(self.save_path, 'points'))
+            mmengine.mkdir_or_exist(osp.join(self.save_path, 'processed', 'points'))
             points.tofile(
-                osp.join(self.save_path, 'points', f'{sample_idx}.bin'))
-            info['pts_path'] = osp.join('points', f'{sample_idx}.bin')
+                osp.join(self.save_path, 'processed', 'points', f'{sample_idx}.bin'))
+            info['pts_path'] = osp.join('processed', 'points', f'{sample_idx}.bin')
 
             #sp_filename = osp.join(self.root_dir, 'forainetv2_instance_data',
             #                        f'{sample_idx}_sp_label.npy')
@@ -104,10 +106,10 @@ class ForAINetV2Data(object):
 
             #if not self.test_mode:
             pts_instance_mask_path = osp.join(
-                self.root_dir, 'forainetv2_instance_data',
+                self.root_dir, 'derived', 'forainetv2_instance_data',
                 f'{sample_idx}_ins_label.npy')
             pts_semantic_mask_path = osp.join(
-                self.root_dir, 'forainetv2_instance_data',
+                self.root_dir, 'derived', 'forainetv2_instance_data',
                 f'{sample_idx}_sem_label.npy')
 
             pts_instance_mask = np.load(pts_instance_mask_path).astype(
@@ -116,21 +118,21 @@ class ForAINetV2Data(object):
                 np.int64)
 
             mmengine.mkdir_or_exist(
-                osp.join(self.save_path, 'instance_mask'))
+                osp.join(self.save_path, 'processed', 'instance_mask'))
             mmengine.mkdir_or_exist(
-                osp.join(self.save_path, 'semantic_mask'))
+                osp.join(self.save_path, 'processed', 'semantic_mask'))
 
             pts_instance_mask.tofile(
-                osp.join(self.save_path, 'instance_mask',
+                osp.join(self.save_path, 'processed', 'instance_mask',
                             f'{sample_idx}.bin'))
             pts_semantic_mask.tofile(
-                osp.join(self.save_path, 'semantic_mask',
+                osp.join(self.save_path, 'processed', 'semantic_mask',
                             f'{sample_idx}.bin'))
 
             info['pts_instance_mask_path'] = osp.join(
-                'instance_mask', f'{sample_idx}.bin')
+                'processed', 'instance_mask', f'{sample_idx}.bin')
             info['pts_semantic_mask_path'] = osp.join(
-                'semantic_mask', f'{sample_idx}.bin')
+                'processed', 'semantic_mask', f'{sample_idx}.bin')
 
             if has_label:
                 annotations = {}

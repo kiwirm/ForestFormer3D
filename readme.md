@@ -41,8 +41,8 @@ At first, please download the dataset and pretrained model from Zenodo, and unzi
 ForestFormer3D/
 ├── data/
 │   └── ForAINetV2/
-│       ├── train_val_data/
-│       └── test_data/
+│       ├── data/raw/plys/train_val/
+│       └── data/raw/plys/test/
 ├── work_dirs/
 │   └── clean_forestformer/
 │       └── epoch_3000_fix.pth
@@ -120,30 +120,25 @@ cp replace_mmdetection_files/transforms_3d.py /opt/conda/lib/python3.10/site-pac
 
 Ensure the following three folders are set up in your workspace:
 
-- `data/ForAINetV2/meta_data`
-- `data/ForAINetV2/test_data`
-- `data/ForAINetV2/train_val_data`
+- `data/splits`
+- `data/raw/plys/test`
+- `data/raw/plys/train_val`
 
-- Place all `.ply` files for training and validation in the `train_val_data` folder.
-- Place all `.ply` files for testing in the `test_data` folder.
+- Place all `.ply` files for training and validation in the `data/raw/plys/train_val` folder.
+- Place all `.ply` files for testing in the `data/raw/plys/test` folder.
 
 #### **Data preprocessing steps**
 
 ```bash
-# Step 1: Navigate to the data folder
-cd data/ForAINetV2
-
+# Step 1: Install LAS dependencies (once)
 pip install laspy
 pip install "laspy[lazrs]"
 
-# Step 2: Run the data loader script
-python batch_load_ForAINetV2_data.py
-# After this you will have folder data/ForAINetV2/forainetv2_instance_data
+# Step 2: Run the data loader script (from repo root)
+python tools/datasets/batch_load_ForAINetV2_data.py
+# After this you will have data/derived/forainetv2_instance_data
 
-# Step 3: Navigate back to the main directory
-cd ../..
-
-# Step 4: Create data for training
+# Step 3: Create data for training (PKLs go to data/derived/infos)
 python tools/create_data_forainetv2.py forainetv2
 ```
 
@@ -173,7 +168,7 @@ CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp30
 ##### Load pre-trained model
 ```bash
 # If you want to use the official pre-trained model, run:
-CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py work_dirs/clean_forestformer/epoch_3000_fix.pth
+CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py data/models/epoch_3000_fix.pth
 
 ```
 
@@ -188,7 +183,7 @@ To evaluate your own test files, follow these steps:
 Place your test files under the following directory:
 
 ```
-data/ForAINetV2/test_data
+data/raw/plys/test
 ```
 
 ### 2. Update the test list
@@ -196,7 +191,7 @@ data/ForAINetV2/test_data
 Edit the following file:
 
 ```
-data/ForAINetV2/meta_data/test_list.txt
+data/splits/test_list.txt
 ```
 
 Append the base names (without extension) of your test files. For example:
@@ -210,7 +205,7 @@ your_custom_test_file_name  # <-- add your file name here
 
 ```bash
 # Step 1: Navigate to the data folder
-cd data/ForAINetV2
+cd data
 
 # Step 2: Install required libraries (if not already installed)
 pip install laspy
@@ -218,7 +213,7 @@ pip install "laspy[lazrs]"
 
 # Step 3: Run the data loader script
 python batch_load_ForAINetV2_data.py
-# This will regenerate data/ForAINetV2/forainetv2_instance_data
+# This will regenerate data/derived/forainetv2_instance_data
 
 # Step 4: Navigate back to the main directory
 cd ../..
@@ -232,7 +227,7 @@ python tools/create_data_forainetv2.py forainetv2
 Once preprocessing is complete, you can run:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py work_dirs/clean_forestformer/epoch_3000_fix.pth
+CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py data/models/epoch_3000_fix.pth
 ```
 
 
@@ -246,7 +241,7 @@ If your test files are **not in `.ply` format**, you need to modify the data loa
 
 File path:
 ```
-data/ForAINetV2/batch_load_ForAINetV2_data.py
+tools/datasets/batch_load_ForAINetV2_data.py
 ```
 
 Find the function `export_one_scan()` and modify:
@@ -267,7 +262,7 @@ pc_file = osp.join(forainetv2_dir, scan_name + '.laz')  # or other formats
 
 File path:
 ```
-data/ForAINetV2/load_forainetv2_data.py
+tools/datasets/load_forainetv2_data.py
 ```
 
 Find the function `export()` and modify:
@@ -371,7 +366,7 @@ bash tools/inference_bluepoint.sh
 - Put all your test file names in:
 
 ```
-data/ForAINetV2/meta_data/test_list_initial.txt
+data/splits/test_list_initial.txt
 ```
 
 instead of the default `test_list.txt`.

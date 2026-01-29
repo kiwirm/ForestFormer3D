@@ -199,20 +199,62 @@ def update_scannet_infos(pkl_path, out_dir):
     }
     print(f'Reading from input file: {pkl_path}.')
     data_list = mmengine.load(pkl_path)
+    if isinstance(data_list, dict) and 'data_list' in data_list:
+        data_list = data_list['data_list']
     print('Start updating:')
     converted_list = []
     for ori_info_dict in mmengine.track_iter_progress(data_list):
-        temp_data_info = get_empty_standard_data_info()
-        temp_data_info['lidar_points']['num_pts_feats'] = ori_info_dict[
-            'point_cloud']['num_features']
-        temp_data_info['lidar_points']['lidar_path'] = Path(
-            ori_info_dict['pts_path']).name
-        if 'pts_semantic_mask_path' in ori_info_dict:
-            temp_data_info['pts_semantic_mask_path'] = Path(
-                ori_info_dict['pts_semantic_mask_path']).name
-        if 'pts_instance_mask_path' in ori_info_dict:
-            temp_data_info['pts_instance_mask_path'] = Path(
-                ori_info_dict['pts_instance_mask_path']).name
+        if 'point_cloud' in ori_info_dict:
+            temp_data_info = get_empty_standard_data_info()
+            temp_data_info['lidar_points']['num_pts_feats'] = ori_info_dict[
+                'point_cloud']['num_features']
+            lidar_path = ori_info_dict['pts_path']
+            if isinstance(lidar_path, str):
+                if '/' not in lidar_path and '\\\\' not in lidar_path:
+                    lidar_path = f'processed/points/{lidar_path}'
+                elif lidar_path.startswith('points/'):
+                    lidar_path = f'processed/{lidar_path}'
+            temp_data_info['lidar_points']['lidar_path'] = lidar_path
+            if 'pts_semantic_mask_path' in ori_info_dict:
+                sem_path = ori_info_dict['pts_semantic_mask_path']
+                if isinstance(sem_path, str):
+                    if '/' not in sem_path and '\\\\' not in sem_path:
+                        sem_path = f'processed/semantic_mask/{sem_path}'
+                    elif sem_path.startswith('semantic_mask/'):
+                        sem_path = f'processed/{sem_path}'
+                temp_data_info['pts_semantic_mask_path'] = sem_path
+            if 'pts_instance_mask_path' in ori_info_dict:
+                ins_path = ori_info_dict['pts_instance_mask_path']
+                if isinstance(ins_path, str):
+                    if '/' not in ins_path and '\\\\' not in ins_path:
+                        ins_path = f'processed/instance_mask/{ins_path}'
+                    elif ins_path.startswith('instance_mask/'):
+                        ins_path = f'processed/{ins_path}'
+                temp_data_info['pts_instance_mask_path'] = ins_path
+        else:
+            # Already v2 format; just normalize relative paths
+            temp_data_info = ori_info_dict
+            lidar = temp_data_info.get('lidar_points', {})
+            lidar_path = lidar.get('lidar_path')
+            if isinstance(lidar_path, str):
+                if '/' not in lidar_path and '\\\\' not in lidar_path:
+                    lidar['lidar_path'] = f'processed/points/{lidar_path}'
+                elif lidar_path.startswith('points/'):
+                    lidar['lidar_path'] = f'processed/{lidar_path}'
+            if 'pts_semantic_mask_path' in temp_data_info:
+                sem_path = temp_data_info['pts_semantic_mask_path']
+                if isinstance(sem_path, str):
+                    if '/' not in sem_path and '\\\\' not in sem_path:
+                        temp_data_info['pts_semantic_mask_path'] = f'processed/semantic_mask/{sem_path}'
+                    elif sem_path.startswith('semantic_mask/'):
+                        temp_data_info['pts_semantic_mask_path'] = f'processed/{sem_path}'
+            if 'pts_instance_mask_path' in temp_data_info:
+                ins_path = temp_data_info['pts_instance_mask_path']
+                if isinstance(ins_path, str):
+                    if '/' not in ins_path and '\\\\' not in ins_path:
+                        temp_data_info['pts_instance_mask_path'] = f'processed/instance_mask/{ins_path}'
+                    elif ins_path.startswith('instance_mask/'):
+                        temp_data_info['pts_instance_mask_path'] = f'processed/{ins_path}'
         if 'super_pts_path' in ori_info_dict:
             temp_data_info['super_pts_path'] = Path(
                 ori_info_dict['super_pts_path']).name
@@ -315,20 +357,61 @@ def update_scannet200_infos(pkl_path, out_dir):
     }
     print(f'Reading from input file: {pkl_path}.')
     data_list = mmengine.load(pkl_path)
+    if isinstance(data_list, dict) and 'data_list' in data_list:
+        data_list = data_list['data_list']
     print('Start updating:')
     converted_list = []
     for ori_info_dict in mmengine.track_iter_progress(data_list):
-        temp_data_info = get_empty_standard_data_info()
-        temp_data_info['lidar_points']['num_pts_feats'] = ori_info_dict[
-            'point_cloud']['num_features']
-        temp_data_info['lidar_points']['lidar_path'] = Path(
-            ori_info_dict['pts_path']).name
-        if 'pts_semantic_mask_path' in ori_info_dict:
-            temp_data_info['pts_semantic_mask_path'] = Path(
-                ori_info_dict['pts_semantic_mask_path']).name
-        if 'pts_instance_mask_path' in ori_info_dict:
-            temp_data_info['pts_instance_mask_path'] = Path(
-                ori_info_dict['pts_instance_mask_path']).name
+        if 'point_cloud' in ori_info_dict:
+            temp_data_info = get_empty_standard_data_info()
+            temp_data_info['lidar_points']['num_pts_feats'] = ori_info_dict[
+                'point_cloud']['num_features']
+            lidar_path = ori_info_dict['pts_path']
+            if isinstance(lidar_path, str):
+                if '/' not in lidar_path and '\\\\' not in lidar_path:
+                    lidar_path = f'processed/points/{lidar_path}'
+                elif lidar_path.startswith('points/'):
+                    lidar_path = f'processed/{lidar_path}'
+            temp_data_info['lidar_points']['lidar_path'] = lidar_path
+            if 'pts_semantic_mask_path' in ori_info_dict:
+                sem_path = ori_info_dict['pts_semantic_mask_path']
+                if isinstance(sem_path, str):
+                    if '/' not in sem_path and '\\\\' not in sem_path:
+                        sem_path = f'processed/semantic_mask/{sem_path}'
+                    elif sem_path.startswith('semantic_mask/'):
+                        sem_path = f'processed/{sem_path}'
+                temp_data_info['pts_semantic_mask_path'] = sem_path
+            if 'pts_instance_mask_path' in ori_info_dict:
+                ins_path = ori_info_dict['pts_instance_mask_path']
+                if isinstance(ins_path, str):
+                    if '/' not in ins_path and '\\\\' not in ins_path:
+                        ins_path = f'processed/instance_mask/{ins_path}'
+                    elif ins_path.startswith('instance_mask/'):
+                        ins_path = f'processed/{ins_path}'
+                temp_data_info['pts_instance_mask_path'] = ins_path
+        else:
+            temp_data_info = ori_info_dict
+            lidar = temp_data_info.get('lidar_points', {})
+            lidar_path = lidar.get('lidar_path')
+            if isinstance(lidar_path, str):
+                if '/' not in lidar_path and '\\\\' not in lidar_path:
+                    lidar['lidar_path'] = f'processed/points/{lidar_path}'
+                elif lidar_path.startswith('points/'):
+                    lidar['lidar_path'] = f'processed/{lidar_path}'
+            if 'pts_semantic_mask_path' in temp_data_info:
+                sem_path = temp_data_info['pts_semantic_mask_path']
+                if isinstance(sem_path, str):
+                    if '/' not in sem_path and '\\\\' not in sem_path:
+                        temp_data_info['pts_semantic_mask_path'] = f'processed/semantic_mask/{sem_path}'
+                    elif sem_path.startswith('semantic_mask/'):
+                        temp_data_info['pts_semantic_mask_path'] = f'processed/{sem_path}'
+            if 'pts_instance_mask_path' in temp_data_info:
+                ins_path = temp_data_info['pts_instance_mask_path']
+                if isinstance(ins_path, str):
+                    if '/' not in ins_path and '\\\\' not in ins_path:
+                        temp_data_info['pts_instance_mask_path'] = f'processed/instance_mask/{ins_path}'
+                    elif ins_path.startswith('instance_mask/'):
+                        temp_data_info['pts_instance_mask_path'] = f'processed/{ins_path}'
         if 'super_pts_path' in ori_info_dict:
             temp_data_info['super_pts_path'] = Path(
                 ori_info_dict['super_pts_path']).name
@@ -392,23 +475,62 @@ def update_forainetv2_infos(pkl_path, out_dir):
     }
     print(f'Reading from input file: {pkl_path}.')
     data_list = mmengine.load(pkl_path)
+    if isinstance(data_list, dict) and 'data_list' in data_list:
+        data_list = data_list['data_list']
     print('Start updating:')
     converted_list = []
     for ori_info_dict in mmengine.track_iter_progress(data_list):
-        temp_data_info = get_empty_standard_data_info()
-        temp_data_info['lidar_points']['num_pts_feats'] = ori_info_dict[
-            'point_cloud']['num_features']
-        temp_data_info['lidar_points']['lidar_path'] = Path(
-            ori_info_dict['pts_path']).name
-        if 'pts_semantic_mask_path' in ori_info_dict:
-            temp_data_info['pts_semantic_mask_path'] = Path(
-                ori_info_dict['pts_semantic_mask_path']).name
-        if 'pts_instance_mask_path' in ori_info_dict:
-            temp_data_info['pts_instance_mask_path'] = Path(
-                ori_info_dict['pts_instance_mask_path']).name
-        #if 'super_pts_path' in ori_info_dict:
-        #    temp_data_info['super_pts_path'] = Path(
-        #        ori_info_dict['super_pts_path']).name
+        if 'point_cloud' in ori_info_dict:
+            temp_data_info = get_empty_standard_data_info()
+            temp_data_info['lidar_points']['num_pts_feats'] = ori_info_dict[
+                'point_cloud']['num_features']
+            lidar_path = ori_info_dict['pts_path']
+            if isinstance(lidar_path, str):
+                if '/' not in lidar_path and '\\\\' not in lidar_path:
+                    lidar_path = f'processed/points/{lidar_path}'
+                elif lidar_path.startswith('points/'):
+                    lidar_path = f'processed/{lidar_path}'
+            temp_data_info['lidar_points']['lidar_path'] = lidar_path
+            if 'pts_semantic_mask_path' in ori_info_dict:
+                sem_path = ori_info_dict['pts_semantic_mask_path']
+                if isinstance(sem_path, str):
+                    if '/' not in sem_path and '\\\\' not in sem_path:
+                        sem_path = f'processed/semantic_mask/{sem_path}'
+                    elif sem_path.startswith('semantic_mask/'):
+                        sem_path = f'processed/{sem_path}'
+                temp_data_info['pts_semantic_mask_path'] = sem_path
+            if 'pts_instance_mask_path' in ori_info_dict:
+                ins_path = ori_info_dict['pts_instance_mask_path']
+                if isinstance(ins_path, str):
+                    if '/' not in ins_path and '\\\\' not in ins_path:
+                        ins_path = f'processed/instance_mask/{ins_path}'
+                    elif ins_path.startswith('instance_mask/'):
+                        ins_path = f'processed/{ins_path}'
+                temp_data_info['pts_instance_mask_path'] = ins_path
+        else:
+            # Already v2 format; normalize relative paths only.
+            temp_data_info = ori_info_dict
+            lidar = temp_data_info.get('lidar_points', {})
+            lidar_path = lidar.get('lidar_path')
+            if isinstance(lidar_path, str):
+                if '/' not in lidar_path and '\\\\' not in lidar_path:
+                    lidar['lidar_path'] = f'processed/points/{lidar_path}'
+                elif lidar_path.startswith('points/'):
+                    lidar['lidar_path'] = f'processed/{lidar_path}'
+            if 'pts_semantic_mask_path' in temp_data_info:
+                sem_path = temp_data_info['pts_semantic_mask_path']
+                if isinstance(sem_path, str):
+                    if '/' not in sem_path and '\\\\' not in sem_path:
+                        temp_data_info['pts_semantic_mask_path'] = f'processed/semantic_mask/{sem_path}'
+                    elif sem_path.startswith('semantic_mask/'):
+                        temp_data_info['pts_semantic_mask_path'] = f'processed/{sem_path}'
+            if 'pts_instance_mask_path' in temp_data_info:
+                ins_path = temp_data_info['pts_instance_mask_path']
+                if isinstance(ins_path, str):
+                    if '/' not in ins_path and '\\\\' not in ins_path:
+                        temp_data_info['pts_instance_mask_path'] = f'processed/instance_mask/{ins_path}'
+                    elif ins_path.startswith('instance_mask/'):
+                        temp_data_info['pts_instance_mask_path'] = f'processed/{ins_path}'
 
         # TODO support camera
         # np.linalg.inv(info['axis_align_matrix'] @ extrinsic): depth2cam
@@ -482,7 +604,14 @@ def update_pkl_infos(dataset, out_dir, pkl_path):
         update_scannet_infos(pkl_path=pkl_path, out_dir=out_dir)
     elif dataset.lower() == 'scannet200':
         update_scannet200_infos(pkl_path=pkl_path, out_dir=out_dir)
-    elif dataset.lower() == 'forainetv2':
+    elif dataset.lower() in {
+        'forainetv2',
+        'forainetv2_cass',
+        'forainetv2_combined',
+        'forainetv2_rgb',
+        'forainetv2_rgb_cass',
+        'forainetv2_rgb_combined',
+    }:
         update_forainetv2_infos(pkl_path=pkl_path, out_dir=out_dir)
     else:
         raise NotImplementedError(f'Do not support convert {dataset} to v2.')
