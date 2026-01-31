@@ -4685,6 +4685,16 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
 
             batch_data_samples[i].gt_instances_3d.sp_masks = \
                 S3DISOneFormer3D.get_gt_inst_masks(inst_mask, voxel_superpoints)
+            # Ensure ratio_inspoint exists for instance-only training
+            n_instances = batch_data_samples[i].gt_instances_3d.sp_masks.shape[0]
+            ratio_tensor = torch.ones(n_instances, device=inst_mask.device)
+            if hasattr(batch_data_samples[i].gt_pts_seg, 'ratio_inspoint'):
+                ratio_dict = batch_data_samples[i].gt_pts_seg.ratio_inspoint
+                if isinstance(ratio_dict, dict):
+                    for k, v in ratio_dict.items():
+                        if 0 <= k < n_instances:
+                            ratio_tensor[k] = float(v)
+            batch_data_samples[i].gt_instances_3d.ratio_inspoint = ratio_tensor
             sp_gt_instances.append(batch_data_samples[i].gt_instances_3d)
 
         loss = self.criterion(x, sp_gt_instances)
