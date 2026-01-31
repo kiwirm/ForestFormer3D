@@ -1,6 +1,3 @@
-from .oneformer3d import (
-    ForAINetV2OneFormer3D, ForAINetV2OneFormer3D_XAwarequery)
-from .oneformer3d_speedup_v1 import InstanceOnlyOneFormer3D
 from .spconv_unet import SpConvUNet
 from .query_decoder import ScanNetQueryDecoder, QueryDecoder, ForAINetv2QueryDecoder, ForAINetv2QueryDecoder_XAwarequery
 from .unified_criterion import (

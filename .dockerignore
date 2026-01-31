@@ -1,0 +1,19 @@
+# Data and outputs
+data/
+work_dirs/
+
+# Local envs/cache
+.venv/
+__pycache__/
+*.pyc
+
+# Large artifacts
+*.pth
+*.tar
+*.tar.gz
+*.zip
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,7 +1,7 @@
 _base_ = [
     'mmdet3d::_base_/default_runtime.py',
 ]
-custom_imports = dict(imports=['oneformer3d'])
+custom_imports = dict(imports=['oneformer3d', 'oneformer3d.oneformer3d_speedup_v1'])
 
 # model settings
 num_channels = 32

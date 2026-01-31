@@ -1,6 +1,6 @@
 FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-devel
 
-# 更新和安装必要的依赖
+# Update and install required system dependencies
 RUN apt-get update \
     && apt-get install -y ffmpeg libsm6 libxext6 git ninja-build libglib2.0-0 libxrender-dev cmake \
     && apt-get install -y build-essential software-properties-common \
@@ -13,14 +13,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libopenblas-dev \
     && apt-get install -y libgeos-dev libproj-dev proj-data proj-bin gdal-bin libgdal-dev libspatialindex-dev
 
-# 设置环境变量以确保 CUDA 工具的可用性
+# Set environment variables so CUDA tools are available
 ENV PATH=/usr/local/cuda/bin:$PATH
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-# 安装调试工具
+# Install debug tools
 RUN pip install debugpy
 
-# 安装 OpenMMLab 项目
+# Install OpenMMLab projects
 RUN pip install --no-deps \
     mmengine==0.7.3 \
     mmdet==3.0.0 \
@@ -28,23 +28,25 @@ RUN pip install --no-deps \
     git+https://github.com/open-mmlab/mmdetection3d.git@22aaa47fdb53ce1870ff92cb7e3f96ae38d17f61
 RUN pip install mmcv==2.0.0 -f https://download.openmmlab.com/mmcv/dist/cu116/torch1.13.0/index.html --no-deps
 
-# 安装 MinkowskiEngine
+# Install MinkowskiEngine
 RUN apt-get update \
     && apt-get -y install libopenblas-dev nvidia-cuda-dev
 #RUN TORCH_CUDA_ARCH_LIST="6.1 7.0 8.6" \  A10
-#A100
-RUN TORCH_CUDA_ARCH_LIST="8.9" \ 
+# A10/L4: limit build parallelism to avoid OOM during MinkowskiEngine compile
+ENV MAX_JOBS=2
+ENV CMAKE_BUILD_PARALLEL_LEVEL=2
+RUN TORCH_CUDA_ARCH_LIST="8.6" \
     pip install git+https://github.com/NVIDIA/MinkowskiEngine.git@02fc608bea4c0549b0a7b00ca1bf15dee4a0b228 -v --no-deps \
     --install-option="--blas=openblas" \
     --install-option="--force_cuda"
 
-# 手动编译 torch-scatter，确保 CUDA 支持
+# Build torch-scatter with CUDA support
 RUN git clone https://github.com/rusty1s/pytorch_scatter.git \
     && cd pytorch_scatter \
     && git checkout tags/2.0.9 -b v2.0.9 \
     && TORCH_CUDA_ARCH_LIST="6.1;7.0;8.0" FORCE_CUDA=1 pip install .
 
-# 单独安装 ScanNet superpoint segmentator
+# Build ScanNet superpoint segmentator
 RUN git clone https://github.com/Karbo123/segmentator.git segmentator \
     && cd segmentator/csrc \
     && git reset --hard 76efe46d03dd27afa78df972b17d07f2c6cfb696 \
@@ -58,7 +60,7 @@ RUN git clone https://github.com/Karbo123/segmentator.git segmentator \
     && make \
     && make install
 
-# 安装剩余的 Python 包
+# Install remaining Python packages
 RUN pip install --no-deps \
     spconv-cu116==2.3.6 \
     addict==2.4.0 \
@@ -122,10 +124,10 @@ RUN pip install --no-deps \
     requests-oauthlib \
     oauthlib
 
-# 设置 PYTHONPATH 环境变量
+# Set PYTHONPATH
 ENV PYTHONPATH=/workspace
 
-# 保持容器运行
+# Keep the container running
 CMD ["bash", "-c", "while true; do sleep 1000; done"]
 
 RUN pip install --no-deps --no-cache-dir \
