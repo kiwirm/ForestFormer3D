@@ -146,6 +146,11 @@ def main():
     if cfg.model.get('test_cfg') is None:
         cfg.model.test_cfg = ConfigDict()
     cfg.model.test_cfg['output_dir'] = cfg.work_dir
+    # If user passed test_cfg.output_dir via --cfg-options, move it to model.test_cfg
+    # to avoid mmengine TestLoop receiving an unsupported argument.
+    if cfg.get('test_cfg') is not None and isinstance(cfg.test_cfg, dict):
+        if 'output_dir' in cfg.test_cfg:
+            cfg.model.test_cfg['output_dir'] = cfg.test_cfg.pop('output_dir')
 
 
     if args.show or args.show_dir:
