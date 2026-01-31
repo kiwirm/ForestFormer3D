@@ -187,6 +187,27 @@ test_dataloader = dict(
         test_mode=True,
         backend_args=None))
 
+class_names = ['ground', 'wood', 'leaf']
+label2cat = {i: name for i, name in enumerate(class_names)}
+metric_meta = dict(
+    label2cat=label2cat,
+    ignore_index=[],
+    classes=class_names,
+    dataset_name='ForAINetV2')
+
+sem_mapping = [0, 1, 2]
+inst_mapping = sem_mapping[1:]
+val_evaluator = dict(
+    type='UnifiedSegMetric',
+    stuff_class_inds=[0],
+    thing_class_inds=[1, 2],
+    min_num_points=1,
+    id_offset=2**16,
+    sem_mapping=sem_mapping,
+    inst_mapping=inst_mapping,
+    metric_meta=metric_meta)
+test_evaluator = val_evaluator
+
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=0.0001, weight_decay=0.05),
