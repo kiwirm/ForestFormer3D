@@ -66,9 +66,9 @@ model = dict(
 dataset_type = 'ForAINetV2SegDataset_'
 data_root_forainetv2 = 'data/'
 data_prefix = dict(
-    pts='processed/points',
-    pts_instance_mask='processed/instance_mask',
-    pts_semantic_mask='processed/semantic_mask')
+    pts='',
+    pts_instance_mask='',
+    pts_semantic_mask='')
 
 train_pipeline = [
     dict(
