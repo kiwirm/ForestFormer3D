@@ -1,11 +1,12 @@
 # Batch loader for RGB/intensity variant (keeps original pipeline intact).
 import argparse
 import datetime
+import glob
 import os
 from os import path as osp
 import numpy as np
-from tools.plyutils import read_ply
-from tools.datasets.load_forainetv2_data_rgb import export as export_rgb
+from tools.support.plyutils import read_ply
+from tools.datasets.parse_ply import export as export_rgb
 
 
 def _get_tqdm():
@@ -28,6 +29,20 @@ def export_one_scan(scan_name,
                     export_func,
                     test_mode=False):
     ply_file = osp.join(forainetv2_dir, scan_name + '.ply')
+    if not osp.exists(ply_file):
+        matches = glob.glob(
+            osp.join(forainetv2_dir, "**", f"{scan_name}.ply"),
+            recursive=True,
+        )
+        if not matches:
+            raise FileNotFoundError(
+                f"PLY not found for scan '{scan_name}' under {forainetv2_dir}"
+            )
+        if len(matches) > 1:
+            raise FileExistsError(
+                f"Multiple PLYs found for scan '{scan_name}': {matches}"
+            )
+        ply_file = matches[0]
     mesh_vertices, semantic_labels, instance_labels, unaligned_bboxes, \
         aligned_bboxes, axis_align_matrix, offsets = export_func(
             ply_file, None, test_mode)
@@ -116,25 +131,25 @@ def main():
         help='The maximum number of the points.')
     parser.add_argument(
         '--output_folder',
-        default='data/derived/forainetv2_instance_data_rgb',
+        default='data/derived/instance_data',
         help='output folder of the result.')
     parser.add_argument(
-        '--train_forainetv2_dir', default='data/raw/plys/train_val', help='forainetv2 data directory.')
+        '--train_forainetv2_dir', default='data/labeled/plys/train_val', help='labeled PLY data directory.')
     parser.add_argument(
         '--test_forainetv2_dir',
-        default='data/raw/plys/test',
-        help='forainetv2 data directory.')
+        default='data/labeled/plys/test',
+        help='labeled PLY data directory.')
     parser.add_argument(
         '--train_scan_names_file',
-        default='data/splits/train_list.txt',
+        default='data/splits/original/original_train_list.txt',
         help='The path of the file that stores the train scan names.')
     parser.add_argument(
         '--val_scan_names_file',
-        default='data/splits/val_list.txt',
+        default='data/splits/original/original_val_list.txt',
         help='The path of the file that stores the val scan names.')
     parser.add_argument(
         '--test_scan_names_file',
-        default='data/splits/test_list.txt',
+        default='data/splits/original/original_test_list.txt',
         help='The path of the file that stores the test scan names.')
     args = parser.parse_args()
 

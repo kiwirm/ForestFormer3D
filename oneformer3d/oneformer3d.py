@@ -11,7 +11,7 @@ from .mask_matrix_nms import mask_matrix_nms
 import open3d as o3d
 import os
 import numpy as np
-from tools.base_modules import Seq, MLP, FastBatchNorm1d
+from tools.support.base_modules import Seq, MLP, FastBatchNorm1d
 from .panoptic_losses import offset_loss, discriminative_loss, FastFocalLoss
 from torch_cluster import fps
 import re

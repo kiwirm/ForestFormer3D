@@ -1,8 +1,8 @@
-# Modified from mmdetection3d/tools/dataset_converters /update_infos_to_v2.py
+# Modified from mmdetection3d/tools/dataset_converters/patch_infos.py
 """Convert the annotation pkl to the standard format in OpenMMLab V2.0.
 
 Example:
-    python tools/dataset_converters/update_infos_to_v2.py
+    python tools/prep/patch_infos.py
         --dataset kitti
         --pkl-path ./data/kitti/kitti_infos_train.pkl
         --out-dir ./kitti_v2/
@@ -463,7 +463,7 @@ def update_scannet200_infos(pkl_path, out_dir):
 
     mmengine.dump(converted_data_info, out_path, 'pkl')
 
-def update_forainetv2_infos(pkl_path, out_dir):
+def update_dataset_infos(pkl_path, out_dir, dataset):
     print(f'{pkl_path} will be modified.')
     if out_dir in pkl_path:
         print(f'Warning, you may overwriting '
@@ -572,7 +572,7 @@ def update_forainetv2_infos(pkl_path, out_dir):
     if ignore_class_name:
         for ignore_class in ignore_class_name:
             metainfo['categories'][ignore_class] = -1
-    metainfo['dataset'] = 'forainetv2'
+    metainfo['dataset'] = dataset
     metainfo['info_version'] = '1.1'
 
     converted_data_info = dict(metainfo=metainfo, data_list=converted_list)
@@ -605,14 +605,11 @@ def update_pkl_infos(dataset, out_dir, pkl_path):
     elif dataset.lower() == 'scannet200':
         update_scannet200_infos(pkl_path=pkl_path, out_dir=out_dir)
     elif dataset.lower() in {
-        'forainetv2',
-        'forainetv2_cass',
-        'forainetv2_combined',
-        'forainetv2_rgb',
-        'forainetv2_rgb_cass',
-        'forainetv2_rgb_combined',
+        'original',
+        'cass',
+        'combined',
     }:
-        update_forainetv2_infos(pkl_path=pkl_path, out_dir=out_dir)
+        update_dataset_infos(pkl_path=pkl_path, out_dir=out_dir, dataset=dataset)
     else:
         raise NotImplementedError(f'Do not support convert {dataset} to v2.')
 

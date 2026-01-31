@@ -4,7 +4,7 @@ import os
 import laspy
 import numpy as np
 
-from tools.plyutils import write_ply
+from tools.support.plyutils import write_ply
 
 
 def _get_rgb(las, n_points):
@@ -30,7 +30,7 @@ def _get_intensity(las, n_points, normalize):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert LAS/LAZ with tree_id to ForAINetV2-style PLY."
+        description="Convert LAS/LAZ with tree_id to labeled PLY."
     )
     parser.add_argument("input_las", help="Path to input LAS/LAZ file")
     parser.add_argument("output_ply", help="Path to output PLY file")
@@ -44,16 +44,6 @@ def main():
         "--tree-id-dim",
         default="tree_id",
         help="Extra bytes dimension name for instance ids (default: tree_id)",
-    )
-    parser.add_argument(
-        "--include-rgb",
-        action="store_true",
-        help="Include RGB fields in output (red, green, blue)",
-    )
-    parser.add_argument(
-        "--include-intensity",
-        action="store_true",
-        help="Include intensity field in output",
     )
     parser.add_argument(
         "--normalize-intensity",
@@ -81,15 +71,13 @@ def main():
     fields = [points]
     field_names = ["x", "y", "z"]
 
-    if args.include_rgb:
-        rgb = _get_rgb(las, n_points)
-        fields.append(rgb)
-        field_names += ["red", "green", "blue"]
+    rgb = _get_rgb(las, n_points)
+    fields.append(rgb)
+    field_names += ["red", "green", "blue"]
 
-    if args.include_intensity:
-        intensity = _get_intensity(las, n_points, args.normalize_intensity)
-        fields.append(intensity)
-        field_names += ["intensity"]
+    intensity = _get_intensity(las, n_points, args.normalize_intensity)
+    fields.append(intensity)
+    field_names += ["intensity"]
 
     fields += [semantic_seg, tree_ids]
     field_names += ["semantic_seg", "treeID"]

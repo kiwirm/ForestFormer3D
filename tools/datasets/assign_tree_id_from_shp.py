@@ -82,8 +82,8 @@ def main():
 
     if target_crs is not None:
         if polys.crs is None:
-            raise ValueError("GT polygons have no CRS; cannot reproject.")
-        if polys.crs.to_string() != target_crs:
+            polys = polys.set_crs(target_crs)
+        elif polys.crs.to_string() != target_crs:
             polys = polys.to_crs(target_crs)
     else:
         # No reprojection possible; warn that CRS mismatch will yield no matches

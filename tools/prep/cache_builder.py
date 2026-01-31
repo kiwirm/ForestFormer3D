@@ -1,4 +1,4 @@
-# RGB/intensity variant of ForAINetV2 data utils (non-destructive).
+# Builds cached bins and info dicts from labeled PLYs (RGB+I).
 import os
 from concurrent import futures as futures
 from os import path as osp
@@ -7,8 +7,8 @@ import mmengine
 import numpy as np
 
 
-class ForAINetV2DataRGB(object):
-    """ForAINetV2 data with RGB+intensity point features."""
+class DatasetCacheBuilder(object):
+    """Dataset cache builder for RGB+intensity point features."""
 
     def __init__(self, root_path, split='train', save_path=None, split_prefix=None):
         self.root_dir = root_path
@@ -26,18 +26,21 @@ class ForAINetV2DataRGB(object):
             for i, treeid in enumerate(list(self.cat_ids))
         }
         assert split in ['train', 'val', 'test']
-        split_name = f'{split}_list.txt'
         if split_prefix:
+            split_dir = osp.join(self.root_dir, 'splits', split_prefix)
             split_name = f'{split_prefix}_{split}_list.txt'
-        split_file = osp.join(self.root_dir, 'splits', split_name)
+        else:
+            split_dir = osp.join(self.root_dir, 'splits', 'original')
+            split_name = f'original_{split}_list.txt'
+        split_file = osp.join(split_dir, split_name)
         mmengine.check_file_exist(split_file)
         self.sample_id_list = mmengine.list_from_file(split_file)
         self.test_mode = (split == 'test')
 
-        self.instance_dir = osp.join(self.root_dir, 'derived', 'forainetv2_instance_data_rgb')
-        self.points_out_dir = osp.join(self.save_path, 'processed', 'points_rgb')
-        self.instance_mask_out_dir = osp.join(self.save_path, 'processed', 'instance_mask_rgb')
-        self.semantic_mask_out_dir = osp.join(self.save_path, 'processed', 'semantic_mask_rgb')
+        self.instance_dir = osp.join(self.root_dir, 'derived', 'instance_data')
+        self.points_out_dir = osp.join(self.save_path, 'processed', 'points')
+        self.instance_mask_out_dir = osp.join(self.save_path, 'processed', 'instance_mask')
+        self.semantic_mask_out_dir = osp.join(self.save_path, 'processed', 'semantic_mask')
 
     def __len__(self):
         return len(self.sample_id_list)
@@ -68,7 +71,7 @@ class ForAINetV2DataRGB(object):
             points = np.load(pts_filename)
             mmengine.mkdir_or_exist(self.points_out_dir)
             points.tofile(osp.join(self.points_out_dir, f'{sample_idx}.bin'))
-            info['pts_path'] = osp.join('processed', 'points_rgb', f'{sample_idx}.bin')
+            info['pts_path'] = osp.join('processed', 'points', f'{sample_idx}.bin')
 
             pts_instance_mask_path = osp.join(self.instance_dir, f'{sample_idx}_ins_label.npy')
             pts_semantic_mask_path = osp.join(self.instance_dir, f'{sample_idx}_sem_label.npy')
@@ -84,8 +87,8 @@ class ForAINetV2DataRGB(object):
             pts_semantic_mask.tofile(
                 osp.join(self.semantic_mask_out_dir, f'{sample_idx}.bin'))
 
-            info['pts_instance_mask_path'] = osp.join('processed', 'instance_mask_rgb', f'{sample_idx}.bin')
-            info['pts_semantic_mask_path'] = osp.join('processed', 'semantic_mask_rgb', f'{sample_idx}.bin')
+            info['pts_instance_mask_path'] = osp.join('processed', 'instance_mask', f'{sample_idx}.bin')
+            info['pts_semantic_mask_path'] = osp.join('processed', 'semantic_mask', f'{sample_idx}.bin')
 
             if has_label:
                 annotations = {}

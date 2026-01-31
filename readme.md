@@ -41,8 +41,8 @@ At first, please download the dataset and pretrained model from Zenodo, and unzi
 ForestFormer3D/
 ├── data/
 │   └── ForAINetV2/
-│       ├── data/raw/plys/train_val/
-│       └── data/raw/plys/test/
+│       ├── data/labeled/plys/train_val/
+│       └── data/labeled/plys/test/
 ├── work_dirs/
 │   └── clean_forestformer/
 │       └── epoch_3000_fix.pth
@@ -121,11 +121,11 @@ cp replace_mmdetection_files/transforms_3d.py /opt/conda/lib/python3.10/site-pac
 Ensure the following three folders are set up in your workspace:
 
 - `data/splits`
-- `data/raw/plys/test`
-- `data/raw/plys/train_val`
+- `data/labeled/plys/test`
+- `data/labeled/plys/train_val`
 
-- Place all `.ply` files for training and validation in the `data/raw/plys/train_val` folder.
-- Place all `.ply` files for testing in the `data/raw/plys/test` folder.
+- Place all `.ply` files for training and validation in the `data/labeled/plys/train_val` folder.
+- Place all `.ply` files for testing in the `data/labeled/plys/test` folder.
 
 #### **Data preprocessing steps**
 
@@ -135,18 +135,18 @@ pip install laspy
 pip install "laspy[lazrs]"
 
 # Step 2: Run the data loader script (from repo root)
-python tools/datasets/batch_load_ForAINetV2_data.py
-# After this you will have data/derived/forainetv2_instance_data
+python tools/datasets/preprocess_dataset.py
+# After this you will have data/derived/instance_data
 
 # Step 3: Create data for training (PKLs go to data/derived/infos)
-python tools/create_data_forainetv2.py forainetv2
+python tools/prep/build_infos.py cass
 ```
 
 #### **Start training**
 ```bash
 export PYTHONPATH=/workspace
 # Run the training script with the specified configuration and work directory
-CUDA_VISIBLE_DEVICES=0 python tools/train.py configs/oneformer3d_qs_radius16_qp300_2many.py \
+CUDA_VISIBLE_DEVICES=0 python tools/training/train.py configs/oneformer3d_qs_radius16_qp300_2many.py \
   --work-dir work_dirs/<output_folder_name>
 ```
 
@@ -161,14 +161,14 @@ python tools/fix_spconv_checkpoint.py \
 #2. Modify the output_path in function "predict" in class ForAINetV2OneFormer3D_XAwarequery in file oneformer3d/oneformer3d.py
 
 #3. Run the test script:
-CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py \
+CUDA_VISIBLE_DEVICES=0 python tools/training/test.py configs/oneformer3d_qs_radius16_qp300_2many.py \
   work_dirs/oneformer3d_1xb4_forainetv2/trained_fix.pth
 
 ```
 ##### Load pre-trained model
 ```bash
 # If you want to use the official pre-trained model, run:
-CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py data/models/epoch_3000_fix.pth
+CUDA_VISIBLE_DEVICES=0 python tools/training/test.py configs/oneformer3d_qs_radius16_qp300_2many.py data/models/epoch_3000_fix.pth
 
 ```
 
@@ -183,7 +183,7 @@ To evaluate your own test files, follow these steps:
 Place your test files under the following directory:
 
 ```
-data/raw/plys/test
+data/labeled/plys/test
 ```
 
 ### 2. Update the test list
@@ -191,7 +191,7 @@ data/raw/plys/test
 Edit the following file:
 
 ```
-data/splits/test_list.txt
+data/splits/original/original_test_list.txt
 ```
 
 Append the base names (without extension) of your test files. For example:
@@ -212,14 +212,14 @@ pip install laspy
 pip install "laspy[lazrs]"
 
 # Step 3: Run the data loader script
-python batch_load_ForAINetV2_data.py
-# This will regenerate data/derived/forainetv2_instance_data
+python preprocess_dataset.py
+# This will regenerate data/derived/instance_data
 
 # Step 4: Navigate back to the main directory
 cd ../..
 
 # Step 5: Create data for training/testing
-python tools/create_data_forainetv2.py forainetv2
+python tools/prep/build_infos.py cass
 ```
 
 ### 4. Run testing script again
@@ -227,7 +227,7 @@ python tools/create_data_forainetv2.py forainetv2
 Once preprocessing is complete, you can run:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py data/models/epoch_3000_fix.pth
+CUDA_VISIBLE_DEVICES=0 python tools/training/test.py configs/oneformer3d_qs_radius16_qp300_2many.py data/models/epoch_3000_fix.pth
 ```
 
 
@@ -237,11 +237,11 @@ CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp30
 
 If your test files are **not in `.ply` format**, you need to modify the data loading logic.
 
-### 1. Update `batch_load_ForAINetV2_data.py`
+### 1. Update `preprocess_dataset.py`
 
 File path:
 ```
-tools/datasets/batch_load_ForAINetV2_data.py
+tools/datasets/preprocess_dataset.py
 ```
 
 Find the function `export_one_scan()` and modify:
@@ -258,11 +258,11 @@ pc_file = osp.join(forainetv2_dir, scan_name + '.laz')  # or other formats
 
 ---
 
-### 2. Update `load_forainetv2_data.py` to support new format
+### 2. Update `parse_ply.py` to support new format
 
 File path:
 ```
-tools/datasets/load_forainetv2_data.py
+tools/datasets/parse_ply.py
 ```
 
 Find the function `export()` and modify:
@@ -292,7 +292,7 @@ pcd = read_laz(ply_file)
 
 ### 3. If test files do not have ground truth labels
 
-Still in `load_forainetv2_data.py`, locate the following lines:
+Still in `parse_ply.py`, locate the following lines:
 
 ```python
 semantic_seg = pcd["semantic_seg"].astype(np.int64)
@@ -355,7 +355,7 @@ This script re-runs inference on remaining "blue points" after the first round.
 ### 🛠️ How to use
 
 1. Prepare your test data as usual (see earlier sections).
-2. Instead of running `tools/test.py`, execute:
+2. Instead of running `tools/training/test.py`, execute:
 
 ```bash
 bash tools/inference_bluepoint.sh
@@ -369,7 +369,7 @@ bash tools/inference_bluepoint.sh
 data/splits/test_list_initial.txt
 ```
 
-instead of the default `test_list.txt`.
+instead of the default `original_test_list.txt`.
 
 - Modify `BLUEPOINTS_DIR` in the script to match your output directory (the output_path in function "predict" in class ForAINetV2OneFormer3D_XAwarequery in file workspace/oneformer3d/oneformer3d.py), for example:
 

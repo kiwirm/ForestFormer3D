@@ -5,7 +5,7 @@ import json
 import os
 
 import numpy as np
-from tools.plyutils import read_ply
+from tools.support.plyutils import read_ply
 
 currentdir = os.path.dirname(
     os.path.abspath(inspect.getfile(inspect.currentframe())))

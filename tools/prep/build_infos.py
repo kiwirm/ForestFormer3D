@@ -1,12 +1,14 @@
 # Data prep entrypoint for RGB/intensity variant (non-destructive).
 import argparse
+import os
 from os import path as osp
 
-from converter_forainetv2_rgb import create_info_file
-from update_infos_to_v2 import update_pkl_infos
+from tools.prep.build_info_index import create_info_file
+from tools.prep.patch_infos import update_pkl_infos
 
 
-def forainetv2_data_prep(root_path, info_prefix, out_dir, workers):
+def dataset_data_prep(root_path, info_prefix, out_dir, workers):
+    os.makedirs(out_dir, exist_ok=True)
     create_info_file(
         root_path, info_prefix, out_dir, workers=workers)
     info_train_path = osp.join(out_dir, f'{info_prefix}_oneformer3d_infos_train.pkl')
@@ -18,7 +20,7 @@ def forainetv2_data_prep(root_path, info_prefix, out_dir, workers):
 
 
 parser = argparse.ArgumentParser(description='Data converter arg parser')
-parser.add_argument('dataset', metavar='forainetv2_rgb', help='name of the dataset')
+parser.add_argument('dataset', metavar='original|cass|combined', help='name of the dataset')
 parser.add_argument(
     '--root-path',
     type=str,
@@ -30,10 +32,12 @@ parser.add_argument(
     default='./data/derived/infos',
     required=False,
     help='name of info pkl')
-parser.add_argument('--extra-tag', type=str, default='forainetv2_rgb')
+parser.add_argument('--extra-tag', type=str, default=None)
 parser.add_argument(
     '--workers', type=int, default=4, help='number of threads to be used')
 args = parser.parse_args()
+if args.extra_tag is None:
+    args.extra_tag = args.dataset
 
 if __name__ == '__main__':
     try:
@@ -42,8 +46,8 @@ if __name__ == '__main__':
     except Exception:
         print("Warning: mmdet3d not available; skipping register_all_modules().")
 
-    if args.dataset in ('forainetv2_rgb'):
-        forainetv2_data_prep(
+    if args.dataset in ('original', 'cass', 'combined'):
+        dataset_data_prep(
             root_path=args.root_path,
             info_prefix=args.extra_tag,
             out_dir=args.out_dir,
