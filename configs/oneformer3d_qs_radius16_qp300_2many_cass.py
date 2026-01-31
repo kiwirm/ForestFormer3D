@@ -89,7 +89,7 @@ train_pipeline = [
         coord_type='DEPTH',
         shift_height=False,
         use_color=False,
-        load_dim=3,
+        load_dim=7,
         use_dim=[0, 1, 2]),
     dict(
         type='LoadAnnotations3D',
@@ -128,7 +128,7 @@ val_pipeline = [
         coord_type='DEPTH',
         shift_height=False,
         use_color=False,
-        load_dim=3,
+        load_dim=7,
         use_dim=[0, 1, 2]),
     dict(
         type='LoadAnnotations3D',
@@ -151,7 +151,7 @@ test_pipeline = [
         coord_type='DEPTH',
         shift_height=False,
         use_color=False,
-        load_dim=3,
+        load_dim=7,
         use_dim=[0, 1, 2]),
     dict(
         type='LoadAnnotations3D',
