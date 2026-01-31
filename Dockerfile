@@ -1,9 +1,7 @@
 FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-devel
 
 # 更新和安装必要的依赖
-RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub \
-    && apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/7fa2af80.pub \
-    && apt-get update \
+RUN apt-get update \
     && apt-get install -y ffmpeg libsm6 libxext6 git ninja-build libglib2.0-0 libxrender-dev cmake \
     && apt-get install -y build-essential software-properties-common \
     && add-apt-repository ppa:ubuntu-toolchain-r/test \
@@ -12,7 +10,8 @@ RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 60 \
     && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 60 \
     && apt-get install -y python3-dev python3-pip \
-    && apt-get install -y --no-install-recommends libopenblas-dev nvidia-utils-530
+    && apt-get install -y --no-install-recommends libopenblas-dev \
+    && apt-get install -y libgeos-dev libproj-dev proj-data proj-bin gdal-bin libgdal-dev libspatialindex-dev
 
 # 设置环境变量以确保 CUDA 工具的可用性
 ENV PATH=/usr/local/cuda/bin:$PATH
@@ -34,7 +33,7 @@ RUN apt-get update \
     && apt-get -y install libopenblas-dev nvidia-cuda-dev
 #RUN TORCH_CUDA_ARCH_LIST="6.1 7.0 8.6" \  A10
 #A100
-RUN TORCH_CUDA_ARCH_LIST="8.0" \ 
+RUN TORCH_CUDA_ARCH_LIST="8.9" \ 
     pip install git+https://github.com/NVIDIA/MinkowskiEngine.git@02fc608bea4c0549b0a7b00ca1bf15dee4a0b228 -v --no-deps \
     --install-option="--blas=openblas" \
     --install-option="--force_cuda"
@@ -71,6 +70,10 @@ RUN pip install --no-deps \
     opencv-python==4.7.0.72 \
     pycocotools==2.0.6 \
     Shapely==1.8.5 \
+    geopandas==0.14.4 \
+    pyproj==3.6.1 \
+    fiona==1.9.6 \
+    rtree==1.3.0 \
     scipy==1.10.1 \
     terminaltables==3.1.10 \
     numba==0.57.0 \
@@ -119,18 +122,16 @@ RUN pip install --no-deps \
     requests-oauthlib \
     oauthlib
 
-RUN apt-get update && apt-get install -y nvidia-utils-530
-
 # 设置 PYTHONPATH 环境变量
 ENV PYTHONPATH=/workspace
 
 # 保持容器运行
 CMD ["bash", "-c", "while true; do sleep 1000; done"]
 
-RUN pip install --no-deps --no-cache-dir\
+RUN pip install --no-deps --no-cache-dir \
     torch-points-kernels==0.7.0
 
-RUN pip uninstall torch-cluster
+RUN pip uninstall -y torch-cluster
 
 RUN pip install --no-deps --no-cache-dir\
     torch-cluster
