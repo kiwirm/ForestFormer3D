@@ -56,7 +56,12 @@ model = dict(
         fix_attention=True),
     criterion=dict(
         type='InstanceCriterionForAI_OneToManyMatch',
-        matcher=dict(type='One2ManyMatcher'),
+        matcher=dict(
+            type='HungarianMatcher',
+            costs=[
+                dict(type='MaskBCECost', weight=1.0),
+                dict(type='MaskDiceCost', weight=1.0),
+            ]),
         loss_weight=[1.0, 1.0, 0.5],
         fix_dice_loss_weight=True,
         iter_matcher=True,
