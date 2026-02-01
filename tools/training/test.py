@@ -52,10 +52,6 @@ def parse_args():
         'Note that the quotation marks are necessary and that no white space '
         'is allowed.')
     parser.add_argument(
-        '--skip-spconv-fix',
-        action='store_true',
-        help='Skip the in-memory spconv checkpoint weight permutation.')
-    parser.add_argument(
         '--launcher',
         choices=['none', 'pytorch', 'slurm', 'mpi'],
         default='none',
@@ -124,30 +120,6 @@ def main():
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
 
-    if not args.skip_spconv_fix:
-        print('Applying spconv checkpoint fix in-memory...')
-        checkpoint = torch.load(args.checkpoint, map_location='cpu')
-
-        key_to_fix = 'state_dict'
-        if key_to_fix not in checkpoint:
-            raise KeyError(f"Could not find a state dictionary ('state_dict') in the checkpoint: {args.checkpoint}")
-
-        checkpoint_to_fix = checkpoint[key_to_fix]
-
-        for layer in list(checkpoint_to_fix.keys()):
-            layer_name = layer
-            if layer_name.startswith('module.'):
-                layer_name = layer_name[len('module.'):]
-            if (layer_name.startswith('unet') or layer_name.startswith('input_conv')) \
-                and layer_name.endswith('weight') \
-                and len(checkpoint_to_fix[layer].shape) == 5:
-                checkpoint_to_fix[layer] = checkpoint_to_fix[layer].permute(1, 2, 3, 4, 0)
-        
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pth') as tmp_checkpoint_file:
-            torch.save(checkpoint, tmp_checkpoint_file.name)
-            cfg.load_from = tmp_checkpoint_file.name
-        print(f'Spconv checkpoint fix applied. Using temporary checkpoint: {cfg.load_from}')
 
     # "Modify the output_path in the function 'predict'"
     # Fix is toinject the work_dir into the model's test_cfg to avoid hardcoded paths for saving predictions.
