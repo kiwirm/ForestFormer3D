@@ -328,9 +328,9 @@ class PointInstOnlyMapping_(BaseTransform):
 
         input_dict['pts_instance_mask'] = pts_instance_mask.numpy()
 
-        # Derive semantic labels: ground=0, all trees=2 (leaf)
+        # Derive semantic labels: ground=0, all trees=3 (leaf after -1 mapping)
         pts_semantic_mask = np.zeros_like(input_dict['pts_instance_mask'])
-        pts_semantic_mask[pts_instance_mask.numpy() >= 0] = 2
+        pts_semantic_mask[pts_instance_mask.numpy() >= 0] = 3
         input_dict['pts_semantic_mask'] = pts_semantic_mask
 
         # Single-class labels for each instance

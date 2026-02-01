@@ -67,9 +67,9 @@ def main():
     n_points = points.shape[0]
     tree_ids = np.asarray(getattr(las, args.tree_id_dim), dtype=np.int32)
     if args.semantic is None:
-        # Derive semantics: ground=0, trees=2
+        # Derive semantics: ground=0, trees=3 (leaf after -1 mapping)
         semantic_seg = np.zeros_like(tree_ids, dtype=np.int32)
-        semantic_seg[tree_ids > 0] = 2
+        semantic_seg[tree_ids > 0] = 3
     else:
         semantic_seg = np.full(tree_ids.shape, args.semantic, dtype=np.int32)
 
