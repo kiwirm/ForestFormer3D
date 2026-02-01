@@ -9,6 +9,14 @@ VENV_ACTIVATE="$ROOT_DIR/.venv/bin/activate"
 source "$VENV_ACTIVATE"
 export PYTHONPATH="$ROOT_DIR"
 
+echo "Cleaning Cass outputs (PLYs, derived arrays, processed bins, infos)..."
+rm -rf "$ROOT_DIR/data/labeled/plys/train_val/cass" "$ROOT_DIR/data/labeled/plys/test/cass"
+rm -f "$ROOT_DIR/data/derived/instance_data"/cass_*_*.npy
+rm -f "$ROOT_DIR/data/derived/infos"/cass_oneformer3d_infos_*.pkl
+rm -f "$ROOT_DIR/data/processed/points"/cass_*.bin
+rm -f "$ROOT_DIR/data/processed/instance_mask"/cass_*.bin
+rm -f "$ROOT_DIR/data/processed/semantic_mask"/cass_*.bin
+
 LAS_INPUT="$ROOT_DIR/data/raw/las/cass/cass.segment.crop.las"
 VECTORS_SHAPE="$ROOT_DIR/data/raw/vectors/tree_crowns.shp"
 LABELED_LAS="$ROOT_DIR/data/intermediate/cass_labeled.las"

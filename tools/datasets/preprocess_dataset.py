@@ -111,10 +111,6 @@ def batch_export(max_num_point,
         print(datetime.datetime.now())
         print(scan_name)
         output_filename_prefix = osp.join(output_folder, scan_name)
-        if osp.isfile(f'{output_filename_prefix}_vert.npy'):
-            print('File already exists. skipping.')
-            print('-' * 20 + 'done')
-            continue
         try:
             export_one_scan(scan_name, output_filename_prefix, max_num_point,
                             forainetv2_dir, export_func, test_mode)

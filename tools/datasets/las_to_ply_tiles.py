@@ -165,6 +165,8 @@ def main():
         field_names += ["semantic_seg", "treeID"]
 
         out_path = osp.join(out_dir, base + ".ply")
+        if osp.exists(out_path):
+            os.remove(out_path)
         ok = write_ply(out_path, fields, field_names)
         if not ok:
             raise RuntimeError(f"Failed to write PLY: {out_path}")
