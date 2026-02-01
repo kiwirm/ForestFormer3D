@@ -111,6 +111,10 @@ def main():
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
 
+    # Ensure the provided checkpoint is loaded for testing.
+    cfg.load_from = args.checkpoint
+    cfg.resume = False
+
     # work_dir is determined in this priority: CLI > segment in file > filename
     if args.work_dir is not None:
         # update configs according to CLI args if args.work_dir is not None
