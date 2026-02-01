@@ -14,5 +14,6 @@ from .transforms_3d import (
     PointInstOnlyMapping_)
 from .data_preprocessor import Det3DDataPreprocessor_
 from .unified_metric import UnifiedSegMetric
+from .instance_only_metric import InstanceOnlyMetric
 from .structures import InstanceData_
 from .forainetv2_dataset import ForAINetV2SegDataset_

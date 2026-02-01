@@ -328,9 +328,23 @@ class PointInstOnlyMapping_(BaseTransform):
 
         input_dict['pts_instance_mask'] = pts_instance_mask.numpy()
 
+        # Derive semantic labels: ground=0, all trees=2 (leaf)
+        pts_semantic_mask = np.zeros_like(input_dict['pts_instance_mask'])
+        pts_semantic_mask[pts_instance_mask.numpy() >= 0] = 2
+        input_dict['pts_semantic_mask'] = pts_semantic_mask
+
         # Single-class labels for each instance
         gt_labels = torch.zeros(len(unique_ids), dtype=torch.long, device=pts_instance_mask.device)
         input_dict['gt_labels_3d'] = gt_labels.cpu().numpy()
+        # Ensure ratio_inspoint exists for instance-only training
+        ratio_inspoint = input_dict.get('ratio_inspoint')
+        if isinstance(ratio_inspoint, dict) and len(unique_ids) > 0:
+            remapped_ratio = {}
+            for old_id, new_id in zip(unique_ids.tolist(), range(len(unique_ids))):
+                remapped_ratio[new_id] = ratio_inspoint.get(old_id, 1.0)
+            input_dict['ratio_inspoint'] = remapped_ratio
+        else:
+            input_dict['ratio_inspoint'] = {int(i): 1.0 for i in range(len(unique_ids))}
 
         if 'eval_ann_info' in input_dict.keys():
             input_dict['eval_ann_info']['pts_instance_mask'] = pts_instance_mask.numpy()

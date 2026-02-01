@@ -58,7 +58,7 @@ Assumes a CUDA Linux GPU machine and that `.venv` is set up.
   - plyutils.py
 
 ## configs/
-- ff3d_pretrained_xyz_seminst.py
+- cass_pretrained_seminst.py
 - ff3d_inst_only_xyz_cass.py
 - ff3d_inst_only_xyz_rgb_i_cass.py
 
@@ -91,14 +91,14 @@ This produces:
 ### 1) Inference Cass with existing checkpoint → eval
 
 The checkpoint in `data/models/epoch_3000_fix.pth` is **semantic+instance** and matches:
-`configs/ff3d_pretrained_xyz_seminst.py`
+`configs/cass_pretrained_seminst.py`
 
 ```
 source .venv/bin/activate
 export PYTHONPATH=.
 
 CUDA_VISIBLE_DEVICES=0 python tools/training/test.py \
-  configs/ff3d_pretrained_xyz_seminst.py \
+  configs/cass_pretrained_seminst.py \
   data/models/epoch_3000_fix.pth \
   --cfg-options test_cfg.output_dir=work_dirs/cass_pretrained_infer
 ```

@@ -52,7 +52,12 @@ def main():
     parser.add_argument("--test-ratio", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--min-points", type=int, default=1000, help="Skip tiles with fewer points")
-    parser.add_argument("--semantic", type=int, default=0)
+    parser.add_argument(
+        "--semantic",
+        type=int,
+        default=None,
+        help="Override semantic_seg with a constant. If omitted, derive from tree_id.",
+    )
     parser.add_argument("--tree-id-dim", default="tree_id")
     parser.add_argument("--normalize-intensity", action="store_true")
     parser.add_argument("--split-prefix", default="cass")
@@ -75,10 +80,15 @@ def main():
             f"Available: {las.point_format.extra_dimension_names}"
         )
 
-    points = np.vstack((las.x, las.y, las.z)).astype(np.float32).T
+    points = np.vstack((las.x, las.y, las.z)).T
     n_points = points.shape[0]
     tree_ids = np.asarray(getattr(las, args.tree_id_dim), dtype=np.int32)
-    semantic_seg = np.full(tree_ids.shape, args.semantic, dtype=np.int32)
+    if args.semantic is None:
+        # Derive semantics: ground=0, trees=2
+        semantic_seg = np.zeros_like(tree_ids, dtype=np.int32)
+        semantic_seg[tree_ids > 0] = 2
+    else:
+        semantic_seg = np.full(tree_ids.shape, args.semantic, dtype=np.int32)
 
     rgb = _get_rgb(las, n_points)
     intensity = _get_intensity(las, n_points, args.normalize_intensity)

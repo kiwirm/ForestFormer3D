@@ -37,8 +37,8 @@ def main():
     parser.add_argument(
         "--semantic",
         type=int,
-        default=0,
-        help="Constant semantic_seg value to write for all points (default: 0)",
+        default=None,
+        help="Override semantic_seg with a constant. If omitted, derive from tree_id.",
     )
     parser.add_argument(
         "--tree-id-dim",
@@ -66,7 +66,12 @@ def main():
     points = np.vstack((las.x, las.y, las.z)).astype(np.float32).T
     n_points = points.shape[0]
     tree_ids = np.asarray(getattr(las, args.tree_id_dim), dtype=np.int32)
-    semantic_seg = np.full(tree_ids.shape, args.semantic, dtype=np.int32)
+    if args.semantic is None:
+        # Derive semantics: ground=0, trees=2
+        semantic_seg = np.zeros_like(tree_ids, dtype=np.int32)
+        semantic_seg[tree_ids > 0] = 2
+    else:
+        semantic_seg = np.full(tree_ids.shape, args.semantic, dtype=np.int32)
 
     fields = [points]
     field_names = ["x", "y", "z"]
