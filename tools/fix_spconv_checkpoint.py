@@ -29,7 +29,8 @@ if __name__ == '__main__':
             continue
         # Only permute if it's still in (k,k,k,in,out) order.
         if weight.shape[0] in (1, 2, 3) and weight.shape[-1] not in (1, 2, 3):
-            state_dict[layer] = weight.permute(1, 2, 3, 4, 0)
+            # (k,k,k,in,out) -> (out,k,k,k,in)
+            state_dict[layer] = weight.permute(4, 0, 1, 2, 3)
 
     if key is not None:
         checkpoint[key] = state_dict
