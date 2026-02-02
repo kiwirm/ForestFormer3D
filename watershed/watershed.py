@@ -3,6 +3,7 @@ import laspy
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+from pathlib import Path
 from scipy.ndimage import gaussian_filter, generic_filter, binary_closing
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
@@ -25,6 +26,21 @@ logger = logging.getLogger(__name__)
 parser = argparse.ArgumentParser(
     description="Watershed crown segmentation pipeline",
 )
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+DEFAULT_INPUT_LAS = REPO_ROOT / "data/raw/las/cass/cass.segment.crop.las"
+DEFAULT_WORK_DIR = REPO_ROOT / "work_dirs/cass_watershed_infer"
+
+parser.add_argument(
+    "--input-las",
+    default=str(DEFAULT_INPUT_LAS),
+    help="Input LAS file path",
+)
+parser.add_argument(
+    "--work-dir",
+    default=str(DEFAULT_WORK_DIR),
+    help="Output directory for watershed artifacts",
+)
 parser.add_argument(
     "--crowns-only",
     action="store_true",
@@ -32,6 +48,9 @@ parser.add_argument(
 )
 ARGS = parser.parse_args()
 CROWNS_ONLY = ARGS.crowns_only
+INPUT_LAS = Path(ARGS.input_las).resolve()
+WORK_DIR = Path(ARGS.work_dir).resolve()
+WORK_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def to_multipolygon(geom):
@@ -54,8 +73,8 @@ SMOOTH_SIGMA = 1.0
 
 CURVATURE_STRETCH = 1.0
 CURVATURE_PCT_CLIP = (5.0, 95.0)
-CHM_TIF = "chm.tif"
-CROWN_VECTOR = "tree_crowns.shp"
+CHM_TIF = WORK_DIR / "chm.tif"
+CROWN_VECTOR = WORK_DIR / "tree_crowns.shp"
 LABEL_SMOOTH_KERNEL_SIZE = 7
 GAP_CLOSE_KERNEL_SIZE = 11
 
@@ -81,7 +100,11 @@ def minimum_curvature(surface, cell_size):
 
 
 logger.info("Loading LAS file")
-las = laspy.read("../data/raw/las/cass/cass.segment.crop.las")
+if not INPUT_LAS.exists():
+    raise FileNotFoundError(f"Input LAS not found: {INPUT_LAS}")
+logger.info(f"Input LAS: {INPUT_LAS}")
+logger.info(f"Output work_dir: {WORK_DIR}")
+las = laspy.read(str(INPUT_LAS))
 x, y, z = las.x, las.y, las.z
 try:
     crs = las.header.parse_crs()
@@ -126,7 +149,7 @@ if not CROWNS_ONLY:
         logger.info("Writing CHM GeoTIFF")
         chm_tif = chm.astype(np.float32)
         with rasterio.open(
-            CHM_TIF,
+            str(CHM_TIF),
             "w",
             driver="GTiff",
             height=chm_tif.shape[0],
@@ -212,7 +235,7 @@ else:
     schema = {"geometry": "MultiPolygon", "properties": {"tree_id": "int"}}
     wrote_any = False
     with fiona.open(
-        CROWN_VECTOR,
+        str(CROWN_VECTOR),
         "w",
         driver="ESRI Shapefile",
         schema=schema,
@@ -294,6 +317,6 @@ if not CROWNS_ONLY:
     keep = (out.tree_id != 0) & (out.classification != 2)
     out = out[keep]
 
-    out_file = "segmented_trees.las"
-    out.write(out_file)
+    out_file = WORK_DIR / "segmented_trees.las"
+    out.write(str(out_file))
     logger.info(f"Segmented LAS written to {out_file}")

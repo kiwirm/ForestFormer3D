@@ -2,11 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FF3D_DIR="${ROOT_DIR}/../forestformer3d"
-VENV_DIR="${ROOT_DIR}/.venv"
+FF3D_DIR="$(cd "${ROOT_DIR}/.." && pwd)"
+VENV_DIR="${FF3D_DIR}/.venv"
+WATERSHED_WORK_DIR="${FF3D_DIR}/work_dirs/cass_watershed_infer"
 
-INPUT_LAS="${1:-${ROOT_DIR}/segmented_trees.las}"
-OUTPUT_PLY="${2:-${FF3D_DIR}/data/labeled/plys/test/segmented_trees.ply}"
+INPUT_LAS="${1:-${WATERSHED_WORK_DIR}/segmented_trees.las}"
+OUTPUT_PLY="${2:-${FF3D_DIR}/data/labeled/plys/test/cass/segmented_trees.ply}"
 SCAN_NAME="${3:-segmented_trees}"
 
 if [[ ! -d "${VENV_DIR}" ]]; then
@@ -15,6 +16,13 @@ fi
 
 source "${VENV_DIR}/bin/activate"
 python -m pip install --quiet laspy
+
+if [[ ! -f "${INPUT_LAS}" ]]; then
+  echo "Input LAS not found: ${INPUT_LAS}" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "${OUTPUT_PLY}")"
 
 python "${FF3D_DIR}/tools/datasets/las_to_ply.py" \
   "${INPUT_LAS}" \
