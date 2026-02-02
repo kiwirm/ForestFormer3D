@@ -73,6 +73,16 @@ RUN pip install --no-deps \
     pycocotools==2.0.6 \
     Shapely==1.8.5 \
     geopandas==0.14.4 \
+    rasterio==1.4.4 \
+    scikit-image==0.25.2 \
+    imageio==2.37.2 \
+    tifffile==2025.5.10 \
+    lazy-loader==0.4 \
+    networkx==3.1 \
+    pillow==12.1.0 \
+    affine==2.4.0 \
+    cligj==0.7.2 \
+    click-plugins==1.1.1.2 \
     pyproj==3.6.1 \
     fiona==1.9.6 \
     rtree==1.3.0 \
