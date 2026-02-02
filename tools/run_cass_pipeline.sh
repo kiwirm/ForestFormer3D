@@ -6,7 +6,6 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VENV_ACTIVATE="$ROOT_DIR/.venv/bin/activate"
 
-source "$VENV_ACTIVATE"
 export PYTHONPATH="$ROOT_DIR"
 
 echo "Cleaning Cass outputs (PLYs, derived arrays, processed bins, infos)..."

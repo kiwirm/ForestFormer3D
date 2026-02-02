@@ -701,7 +701,7 @@ class ForAINetV2OneFormer3D(Base3DDetector):
         base_name = os.path.basename(lidar_path)
         current_filename = os.path.splitext(base_name)[0]
         #if 'val' in lidar_path:
-        if 'test' in lidar_path:
+        if 'test' in lidar_path or self.test_cfg.get('output_dir'):
             import numpy as np
             from sklearn.neighbors import NearestNeighbors
             from plyfile import PlyData, PlyElement
@@ -1993,7 +1993,17 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                         
                         #FPS from all tree points
                         batch_tensor_4 = torch.zeros(embed_logits[i][tree_indices].size(0), dtype=torch.long).to(embed_logits[i].device)  # Ensure batch_tensor on same device
-                        topk_indices_4 = fps(embed_logits[i][tree_indices], batch_tensor_4, ratio=min(self.query_point_num / embed_logits[i][tree_indices].size(0), torch.tensor([1.0]).to(embed_logits[i].device)))
+                        ratio_val = min(self.query_point_num / embed_logits[i][tree_indices].size(0), 1.0)
+                        try:
+                            topk_indices_4 = fps(embed_logits[i][tree_indices], batch_tensor_4, ratio=ratio_val)
+                        except RuntimeError as exc:
+                            if 'Not compiled with CUDA support' not in str(exc):
+                                raise
+                            topk_indices_4 = fps(
+                                embed_logits[i][tree_indices].cpu(),
+                                batch_tensor_4.cpu(),
+                                ratio=ratio_val
+                            ).to(embed_logits[i].device)
                         selected_indices_case4 = tree_indices[topk_indices_4]
 
                         # Retrieve relevant information for the selected points
@@ -2096,7 +2106,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
         base_name = os.path.basename(lidar_path)
         current_filename = os.path.splitext(base_name)[0]
         #if 'val' in lidar_path:
-        if 'test' in lidar_path:
+        if 'test' in lidar_path or self.test_cfg.get('output_dir'):
             import numpy as np
             from sklearn.neighbors import NearestNeighbors
             from plyfile import PlyData, PlyElement
@@ -2151,7 +2161,18 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                     
                     # FPS from all tree points
                     batch_tensor_4 = torch.zeros(embed_logits[tree_indices].size(0), dtype=torch.long).to(embed_logits.device)  # Ensure batch_tensor on same device
-                    topk_indices_4 = fps(embed_logits[tree_indices], batch_tensor_4, ratio=min(self.query_point_num / embed_logits[tree_indices].size(0), torch.tensor([1.0]).to(embed_logits.device)))
+                    ratio_val = min(self.query_point_num / embed_logits[tree_indices].size(0), 1.0)
+                    try:
+                        topk_indices_4 = fps(embed_logits[tree_indices], batch_tensor_4, ratio=ratio_val)
+                    except RuntimeError as exc:
+                        if 'Not compiled with CUDA support' not in str(exc):
+                            raise
+                        # CPU fallback for torch_cluster without CUDA
+                        topk_indices_4 = fps(
+                            embed_logits[tree_indices].cpu(),
+                            batch_tensor_4.cpu(),
+                            ratio=ratio_val
+                        ).to(embed_logits.device)
                     selected_indices_case4 = tree_indices[topk_indices_4]
 
                     # add content queries
@@ -2263,11 +2284,13 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
         lidar_path = batch_data_samples[0].lidar_path
         base_name = os.path.basename(lidar_path)
         current_filename = os.path.splitext(base_name)[0]
+        if os.environ.get('FF3D_DEBUG_OUTPUT') == '1':
+            print(f"[FF3D_DEBUG_OUTPUT] lidar_path={lidar_path} output_dir={self.test_cfg.get('output_dir')}")
         t1 = time.time()                 
         #########print(f"load pc: {(t1 - t0)*1000:.0f} ms")
         #is_test = True
         #if is_test:
-        if 'test' in lidar_path:
+        if 'test' in lidar_path or self.test_cfg.get('output_dir'):
             step_size = self.radius/4
             grid_size = 0.2
             num_points = 640000
@@ -2350,7 +2373,17 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                     
                     # FPS from all tree points
                     batch_tensor_4 = torch.zeros(embed_logits[tree_indices].size(0), dtype=torch.long).to(embed_logits.device)  # Ensure batch_tensor on same device
-                    topk_indices_4 = fps(embed_logits[tree_indices], batch_tensor_4, ratio=min(self.query_point_num / embed_logits[tree_indices].size(0), torch.tensor([1.0]).to(embed_logits.device)))
+                    ratio_val = min(self.query_point_num / embed_logits[tree_indices].size(0), 1.0)
+                    try:
+                        topk_indices_4 = fps(embed_logits[tree_indices], batch_tensor_4, ratio=ratio_val)
+                    except RuntimeError as exc:
+                        if 'Not compiled with CUDA support' not in str(exc):
+                            raise
+                        topk_indices_4 = fps(
+                            embed_logits[tree_indices].cpu(),
+                            batch_tensor_4.cpu(),
+                            ratio=ratio_val
+                        ).to(embed_logits.device)
                     selected_indices_case4 = tree_indices[topk_indices_4]
 
                     # add content queries

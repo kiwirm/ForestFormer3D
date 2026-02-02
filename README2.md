@@ -90,8 +90,12 @@ This produces:
 
 ### 1) Inference Cass with existing checkpoint → eval
 
-The checkpoint in `data/models/epoch_3000_fix.pth` is **semantic+instance** and matches:
+The pretrained **semantic+instance** checkpoint matches:
 `configs/cass_pretrained_seminst.py`
+
+Checkpoint selection depends on your `spconv` version:
+- `spconv` v1 weight layout: `data/models/epoch_3000_fix.pth`
+- `spconv` v2 weight layout: `data/models/epoch_3000_fix_spconv.pth`
 
 ```
 source .venv/bin/activate
@@ -99,7 +103,7 @@ export PYTHONPATH=.
 
 CUDA_VISIBLE_DEVICES=0 python tools/training/test.py \
   configs/cass_pretrained_seminst.py \
-  data/models/epoch_3000_fix.pth \
+  data/models/epoch_3000_fix_spconv.pth \
   --cfg-options test_cfg.output_dir=work_dirs/cass_pretrained_infer
 ```
 

@@ -17,6 +17,7 @@ if __name__ == '__main__':
         key = None
 
     state_dict = checkpoint if key is None else checkpoint[key]
+    kernel_sizes = {1, 2, 3, 5, 7}
     for layer, weight in list(state_dict.items()):
         layer_name = layer
         if layer_name.startswith('model.'):
@@ -27,10 +28,33 @@ if __name__ == '__main__':
             continue
         if not hasattr(weight, 'shape') or len(weight.shape) != 5:
             continue
-        # Only permute if it's still in (k,k,k,in,out) order.
-        if weight.shape[0] in (1, 2, 3) and weight.shape[-1] not in (1, 2, 3):
-            # (k,k,k,in,out) -> (out,k,k,k,in)
+
+        shape = list(weight.shape)
+        kernel_idx = [i for i, dim in enumerate(shape) if dim in kernel_sizes]
+        if len(kernel_idx) not in (3, 4):
+            continue
+
+        if kernel_idx == [1, 2, 3]:
+            # Already (out, k, k, k, in)
+            continue
+        if kernel_idx == [0, 1, 2]:
+            # (k, k, k, in, out) -> (out, k, k, k, in)
             state_dict[layer] = weight.permute(4, 0, 1, 2, 3)
+            continue
+        if kernel_idx == [0, 1, 2, 3]:
+            # (k, k, k, in, out) with in also == k (e.g., input_conv) -> (out, k, k, k, in)
+            state_dict[layer] = weight.permute(4, 0, 1, 2, 3)
+            continue
+        if kernel_idx == [2, 3, 4]:
+            # (out, in, k, k, k) or (in, out, k, k, k) -> (out, k, k, k, in)
+            dim0_small = shape[0] in kernel_sizes
+            dim1_small = shape[1] in kernel_sizes
+            if dim0_small and not dim1_small:
+                # (in, out, k, k, k)
+                state_dict[layer] = weight.permute(1, 2, 3, 4, 0)
+            else:
+                # (out, in, k, k, k) or ambiguous -> assume out,in
+                state_dict[layer] = weight.permute(0, 2, 3, 4, 1)
 
     if key is not None:
         checkpoint[key] = state_dict

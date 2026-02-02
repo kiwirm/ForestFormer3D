@@ -1,8 +1,15 @@
 # Ignore Python bytecode
 *.pyc
-__pycache__/
+**/__pycache__/
 
 # Data (keep only placeholders/docs if needed)
 data/*
 !data/.gitkeep
+
+node_modules
+
 !data/README.md
+
+work_dirs
+!work_dirs/plots/
+!work_dirs/plots/*

@@ -114,6 +114,21 @@ def main():
     # Ensure the provided checkpoint is loaded for testing.
     cfg.load_from = args.checkpoint
     cfg.resume = False
+    if os.environ.get('FF3D_MANUAL_LOAD') == '1':
+        # We'll load weights manually after building the runner.
+        cfg.load_from = None
+
+    if os.environ.get('FF3D_DEBUG_CKPT') == '1':
+        try:
+            ckpt = torch.load(args.checkpoint, map_location='cpu')
+            sd = ckpt.get('state_dict', ckpt.get('model', ckpt))
+            sample_key = 'unet.blocks.block0.conv_branch.2.weight'
+            if sample_key in sd:
+                print(f'[FF3D_DEBUG_CKPT] {sample_key} shape: {sd[sample_key].shape}')
+            else:
+                print(f'[FF3D_DEBUG_CKPT] {sample_key} not found in checkpoint')
+        except Exception as exc:
+            print(f'[FF3D_DEBUG_CKPT] failed to load checkpoint: {exc}')
 
     # work_dir is determined in this priority: CLI > segment in file > filename
     if args.work_dir is not None:
@@ -156,6 +171,54 @@ def main():
         # build customized runner from the registry
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
+
+    if os.environ.get('FF3D_MANUAL_LOAD') == '1':
+        ckpt = torch.load(args.checkpoint, map_location='cpu')
+        sd = ckpt.get('state_dict', ckpt.get('model', ckpt))
+        model_sd = runner.model.state_dict()
+        loaded = 0
+        permuted = 0
+        skipped = 0
+        missing = 0
+
+        for k, v in model_sd.items():
+            if k not in sd:
+                missing += 1
+                continue
+            src = sd[k]
+            if not torch.is_tensor(src):
+                skipped += 1
+                continue
+            if src.shape == v.shape:
+                v.copy_(src.to(device=v.device, dtype=v.dtype))
+                loaded += 1
+                continue
+            if src.ndim == 5 and v.ndim == 5:
+                permuted_ok = False
+                for p in ((0, 2, 3, 4, 1), (1, 2, 3, 4, 0), (4, 0, 1, 2, 3)):
+                    if src.permute(p).shape == v.shape:
+                        v.copy_(src.permute(p).contiguous().to(device=v.device, dtype=v.dtype))
+                        permuted += 1
+                        permuted_ok = True
+                        break
+                if permuted_ok:
+                    continue
+            skipped += 1
+
+        print(f'[FF3D_MANUAL_LOAD] loaded={loaded} permuted={permuted} skipped={skipped} missing={missing}')
+        # Prevent mmengine from re-loading and re-triggering spconv checks.
+        runner.load_checkpoint = lambda *args, **kwargs: None
+
+    if os.environ.get('FF3D_DEBUG_CKPT') == '1':
+        try:
+            sample_key = 'unet.blocks.block0.conv_branch.2.weight'
+            model_sd = runner.model.state_dict()
+            if sample_key in model_sd:
+                print(f'[FF3D_DEBUG_CKPT] model {sample_key} shape: {model_sd[sample_key].shape}')
+            else:
+                print(f'[FF3D_DEBUG_CKPT] model {sample_key} not found in state_dict')
+        except Exception as exc:
+            print(f'[FF3D_DEBUG_CKPT] failed to inspect model: {exc}')
 
     # start testing
     runner.test()
