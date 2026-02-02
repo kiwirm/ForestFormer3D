@@ -71,8 +71,9 @@ def read_tile(ply_path, gt_field, pred_field):
     if not required.issubset(set(names)):
         missing = ", ".join(sorted(required - set(names)))
         raise ValueError(f"Missing required fields in {ply_path}: {missing}")
-    x = np.asarray(data["x"], dtype=np.float32)
-    y = np.asarray(data["y"], dtype=np.float32)
+    # Keep double precision to avoid meter-scale quantization on large map coords (e.g. NZTM y~5e6).
+    x = np.asarray(data["x"], dtype=np.float64)
+    y = np.asarray(data["y"], dtype=np.float64)
     inst_gt = np.asarray(data[gt_field], dtype=np.int64)
     inst_pred = np.asarray(data[pred_field], dtype=np.int64)
     return x, y, inst_gt, inst_pred
@@ -120,6 +121,9 @@ def parse_eval_stats(eval_path):
 
 def plot_tile(tile_name, ply_path, eval_path, out_path, point_size, dpi, gt_field, pred_field):
     x, y, inst_gt, inst_pred = read_tile(ply_path, gt_field, pred_field)
+    # Plot in local tile coordinates to avoid precision artifacts with large absolute coordinates.
+    x = x - np.min(x)
+    y = y - np.min(y)
 
     gt_colors = colors_for_labels(inst_gt)
     pred_colors = colors_for_labels(inst_pred)
@@ -173,7 +177,7 @@ def main():
         ply_files = ply_files[: args.limit]
 
     if not ply_files:
-        raise SystemExit(f"No .ply files found in {pred_dir}")
+        raise SystemExit(f"No .ply files found in {work_dir}")
 
     for fname in ply_files:
         tile_name = os.path.splitext(fname)[0]

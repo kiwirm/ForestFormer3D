@@ -66,9 +66,25 @@ def main():
 
     polys = gpd.read_file(args.gt)
     if args.tree_id_col not in polys.columns:
-        raise ValueError(
-            f"Missing '{args.tree_id_col}' in GT polygons. Available: {list(polys.columns)}"
-        )
+        # Robust fallback for vector files without an explicit tree-id attribute.
+        # Prefer common FID/OBJECTID fields; otherwise use 1..N row indices.
+        fallback_col = None
+        for cand in ("FID", "fid", "OBJECTID", "objectid", "id", "ID"):
+            if cand in polys.columns:
+                fallback_col = cand
+                break
+        if fallback_col is not None:
+            print(
+                f"Warning: '{args.tree_id_col}' not found in polygons; "
+                f"using '{fallback_col}' + 1 as tree IDs."
+            )
+            polys[args.tree_id_col] = polys[fallback_col].astype(np.int64) + 1
+        else:
+            print(
+                f"Warning: '{args.tree_id_col}' not found in polygons and no fallback id field "
+                "detected; using row index + 1 as tree IDs."
+            )
+            polys[args.tree_id_col] = np.arange(1, len(polys) + 1, dtype=np.int64)
 
     las = laspy.read(args.las)
     target_crs = args.target_crs

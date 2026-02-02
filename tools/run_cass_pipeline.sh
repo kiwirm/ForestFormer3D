@@ -25,7 +25,7 @@ TRAIN_RATIO=0.8
 VAL_RATIO=0.1
 TEST_RATIO=0.1
 SPLIT_PREFIX=cass
-TARGET_CRS="EPSG:2193"
+TARGET_CRS="EPSG:2134"
 TREE_ID_COL=tree_id
 
 # 1) Assign tree_id from polygons
