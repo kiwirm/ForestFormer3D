@@ -14,6 +14,7 @@ def create_info_file(data_path,
     split_prefix_map = {
         'original': 'original',
         'cass': 'cass',
+        'scene': 'scene',
         'combined': 'combined',
     }
     assert pkl_prefix in split_prefix_map, \

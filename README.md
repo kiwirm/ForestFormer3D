@@ -1,55 +1,45 @@
-# ForestFormer3D Cass Runbook (Instance-Only)
+# ForestFormer3D Single-Scene Runbook (Instance-Only)
 
-This runbook documents the current Cass workflow with RGB+I data prep and instance-only training.
+This runbook documents the current single-scene workflow with RGB+I data prep and instance-only training.
 Assumes a CUDA Linux GPU machine and `.venv` is set up.
 
 ## Current naming convention
 
-Configs and work dirs now match by name:
+Configs and work dirs match by name:
 - `configs/pretrained.py` -> `work_dirs/pretrained`
 - `configs/xyz.py` -> `work_dirs/xyz`
 - `configs/xyzrgb.py` -> `work_dirs/xyzrgb`
 
-## Epoch defaults (important)
+All three configs currently use:
+- `max_epochs=3000`
+- `val_interval=100`
 
-- `configs/xyz.py` trains for `max_epochs=100` by default.
-- `configs/xyzrgb.py` trains for `max_epochs=100` by default.
-- `configs/pretrained.py` uses `max_epochs=3000` (pretrained config behavior).
+## Single-scene data pipeline
 
-To run XYZ for 3000 epochs without editing the config:
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python tools/training/train.py \
-  configs/xyz.py \
-  --work-dir work_dirs/xyz \
-  --cfg-options train_cfg.max_epochs=3000 train_cfg.val_interval=100
-```
-
-## Current split setup (important)
-
-The Cass split files are intentionally set so test data is also used for training:
-- `data/splits/cass/cass_train_list.txt` (65 tiles)
-- `data/splits/cass/cass_val_list.txt` (65 tiles)
-- `data/splits/cass/cass_test_list.txt` (65 tiles)
-
-All three info files were rebuilt from these lists:
-- `data/derived/infos/cass_oneformer3d_infos_train.pkl`
-- `data/derived/infos/cass_oneformer3d_infos_val.pkl`
-- `data/derived/infos/cass_oneformer3d_infos_test.pkl`
-
-## Prepare / rebuild data caches and infos
+Run the pipeline:
 
 ```bash
 source .venv/bin/activate
 export PYTHONPATH=.
-
-python tools/datasets/preprocess_dataset.py \
-  --train_scan_names_file data/splits/cass/cass_train_list.txt \
-  --val_scan_names_file data/splits/cass/cass_val_list.txt \
-  --test_scan_names_file data/splits/cass/cass_test_list.txt
-
-python tools/prep/build_infos.py cass --extra-tag cass
+./tools/run_prep
 ```
+
+What it does:
+- Uses `data/raw/las/cass/cass.segment.crop.train.las` as train scene input.
+- Uses `data/raw/las/cass/cass.segment.crop.test.las` as test scene input only if the file exists.
+- Builds one PLY scene for train and one for test (no tiles):
+  - `data/labeled/plys/train_val/train_scene.ply`
+  - `data/labeled/plys/test/test_scene.ply` (optional)
+- Writes split files:
+  - `data/splits/scene/scene_train_list.txt`
+  - `data/splits/scene/scene_val_list.txt`
+  - `data/splits/scene/scene_test_list.txt`
+- Rebuilds derived caches and info files:
+  - `data/derived/infos/scene_oneformer3d_infos_train.pkl`
+  - `data/derived/infos/scene_oneformer3d_infos_val.pkl`
+  - `data/derived/infos/scene_oneformer3d_infos_test.pkl`
+
+The pipeline also auto-creates required folders if missing (`data/derived`, `data/processed`, `data/splits/scene`, `data/labeled/plys/...`, `data/intermediate`).
 
 ## Workflows
 
@@ -114,8 +104,8 @@ python tools/evaluation/final_eval.py work_dirs/xyzrgb/eval
 
 ## Notes
 
-- XYZ config uses `use_dim=[0,1,2]` and ignores RGB+I features at train/test time.
-- For crown-focused training, both `configs/xyz.py` and `configs/xyzrgb.py` use anisotropic sampling/voxelization (XY finer than Z): `voxel_size=[0.16, 0.16, 0.28]` with `GridSample(grid_size=0.16)`.
-- For full-paper inference behavior, both configs now use sliding-cylinder merge in `model.test_cfg` (`sliding_inference=True`, `radius=16`, `stride=4`, edge buffer `0.5`, score-based overlap merge).
+- `configs/xyz.py` uses `use_dim=[0,1,2]` (XYZ only).
+- `configs/xyzrgb.py` uses `use_dim=[0,1,2,3,4,5,6]` (XYZ+RGB+I).
+- Both configs use anisotropic voxelization for crown-focused training: `voxel_size=[0.16, 0.16, 0.28]` with `GridSample(grid_size=0.16)`.
+- Both configs use sliding-cylinder merge for inference (`sliding_inference=True`, `radius=16`, `stride=4`, edge buffer `0.5`, overlap merge).
 - The pretrained checkpoint is semantic+instance and is not directly comparable to instance-only runs.
-- If you want different output locations, override `test_cfg.output_dir` in the test command.

@@ -20,7 +20,7 @@ def dataset_data_prep(root_path, info_prefix, out_dir, workers):
 
 
 parser = argparse.ArgumentParser(description='Data converter arg parser')
-parser.add_argument('dataset', metavar='original|cass|combined', help='name of the dataset')
+parser.add_argument('dataset', metavar='original|cass|scene|combined', help='name of the dataset')
 parser.add_argument(
     '--root-path',
     type=str,
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     except Exception:
         print("Warning: mmdet3d not available; skipping register_all_modules().")
 
-    if args.dataset in ('original', 'cass', 'combined'):
+    if args.dataset in ('original', 'cass', 'scene', 'combined'):
         dataset_data_prep(
             root_path=args.root_path,
             info_prefix=args.extra_tag,
