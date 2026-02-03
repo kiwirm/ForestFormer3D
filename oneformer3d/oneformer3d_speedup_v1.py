@@ -289,7 +289,11 @@ class ScanNetOneFormer3D(ScanNetOneFormer3DMixin, Base3DDetector):
         self.unet = MODELS.build(backbone)
         self.decoder = MODELS.build(decoder)
         self.criterion = MODELS.build(criterion)
-        self.voxel_size = voxel_size
+        # Allow scalar or per-axis voxel size (e.g., [vx, vy, vz]).
+        if isinstance(voxel_size, (list, tuple)):
+            self.voxel_size = torch.tensor(voxel_size, dtype=torch.float32)
+        else:
+            self.voxel_size = voxel_size
         self.num_classes = num_classes
         self.min_spatial_shape = min_spatial_shape
         self.query_thr = query_thr
@@ -348,7 +352,9 @@ class ScanNetOneFormer3D(ScanNetOneFormer3DMixin, Base3DDetector):
         """
         if elastic_points is None:
             coordinates, features = ME.utils.batch_sparse_collate(
-                [((p[:, :3] - p[:, :3].min(0)[0]) / self.voxel_size,
+                [((p[:, :3] - p[:, :3].min(0)[0]) /
+                  (self.voxel_size.to(p.device) if torch.is_tensor(self.voxel_size)
+                   else self.voxel_size),
                   torch.hstack((p[:, 3:], p[:, :3] - p[:, :3].mean(0))))
                  for p in points])
         else:
@@ -550,7 +556,11 @@ class ForAINetV2OneFormer3D(Base3DDetector):
         self.unet = MODELS.build(backbone)
         self.decoder = MODELS.build(decoder)
         self.criterion = MODELS.build(criterion)
-        self.voxel_size = voxel_size
+        # Allow scalar or per-axis voxel size (e.g., [vx, vy, vz]).
+        if isinstance(voxel_size, (list, tuple)):
+            self.voxel_size = torch.tensor(voxel_size, dtype=torch.float32)
+        else:
+            self.voxel_size = voxel_size
         self.num_classes = num_classes
         self.min_spatial_shape = min_spatial_shape
         self.stuff_classes = stuff_classes
@@ -607,7 +617,9 @@ class ForAINetV2OneFormer3D(Base3DDetector):
         """
         if elastic_points is None:
             coordinates, features = ME.utils.batch_sparse_collate(
-                [((p[:, :3] - p[:, :3].min(0)[0]) / self.voxel_size,
+                [((p[:, :3] - p[:, :3].min(0)[0]) /
+                  (self.voxel_size.to(p.device) if torch.is_tensor(self.voxel_size)
+                   else self.voxel_size),
                   torch.hstack((p[:, 3:], p[:, :3] - p[:, :3].mean(0))))
                  for p in points])
         else:
@@ -4572,7 +4584,11 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
         self.unet = MODELS.build(backbone)
         self.decoder = MODELS.build(decoder)
         self.criterion = MODELS.build(criterion)
-        self.voxel_size = voxel_size
+        # Allow scalar or per-axis voxel size (e.g., [vx, vy, vz]).
+        if isinstance(voxel_size, (list, tuple)):
+            self.voxel_size = torch.tensor(voxel_size, dtype=torch.float32)
+        else:
+            self.voxel_size = voxel_size
         self.min_spatial_shape = min_spatial_shape
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
@@ -4625,7 +4641,9 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
         """
         if elastic_points is None:
             coordinates, features = ME.utils.batch_sparse_collate(
-                [((p[:, :3] - p[:, :3].min(0)[0]) / self.voxel_size,
+                [((p[:, :3] - p[:, :3].min(0)[0]) /
+                  (self.voxel_size.to(p.device) if torch.is_tensor(self.voxel_size)
+                   else self.voxel_size),
                   torch.hstack((p[:, 3:], p[:, :3] - p[:, :3].mean(0))))
                  for p in points])
         else:
@@ -4720,7 +4738,128 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
                 - pts_instance_mask (Tensor): Instance mask, has a shape
                     (num_points, num_instances) of type bool.
         """
-        
+        # Optional paper-style sliding-cylinder inference with score-based merge.
+        if self.test_cfg.get('sliding_inference', False):
+            scene_name = batch_data_samples[0].lidar_path
+            original_points = batch_inputs_dict['points'][0]
+
+            radius = float(self.test_cfg.get('radius', 16.0))
+            stride = float(self.test_cfg.get('stride', radius / 4.0))
+            grid_size = float(self.test_cfg.get('grid_size', self.voxel_size if not torch.is_tensor(self.voxel_size) else 0.2))
+            num_points = int(self.test_cfg.get('num_points', 640000))
+            edge_buffer = float(self.test_cfg.get('edge_buffer', 0.5))
+            overlap_thr = float(self.test_cfg.get('merge_overlap_thr', 0.3))
+
+            regions = ForAINetV2OneFormer3D_XAwarequery.generate_cylindrical_regions(
+                original_points, radius, stride)
+
+            all_pre_ins = np.full(original_points.shape[0], -1, dtype=np.int64)
+            global_instance_scores = np.zeros((original_points.shape[0],), dtype=float)
+            best_masks = []
+            max_instance = 0
+
+            for region in regions:
+                region_mask = ((original_points[:, 0] - region[0]) ** 2 +
+                               (original_points[:, 1] - region[1]) ** 2) <= radius ** 2
+                pc1 = original_points[region_mask]
+                pc1_indices = torch.where(region_mask)[0]
+                if len(pc1) == 0:
+                    continue
+
+                pc2, pc2_indices = ForAINetV2OneFormer3D_XAwarequery.grid_sample(
+                    pc1, pc1_indices, grid_size)
+
+                if len(pc2) > num_points:
+                    pc3, pc3_indices = ForAINetV2OneFormer3D_XAwarequery.points_random_sampling(
+                        pc2, pc2_indices, num_points)
+                else:
+                    pc3, pc3_indices = pc2, pc2_indices
+
+                coordinates, features, inverse_mapping2, spatial_shape = self.collate([pc3])
+                x = spconv.SparseConvTensor(features, coordinates, spatial_shape, 1)
+                x = self.extract_feat(x)
+                x = self.decoder(x, [scene_name])
+                pred = self.predict_by_feat(x, inverse_mapping2, [scene_name])[0]
+
+                masks = pred.pts_instance_mask  # (K, N3) bool tensor
+                scores = pred.instance_scores   # (K,) float tensor
+                if masks.shape[0] == 0:
+                    continue
+
+                keep = scores > float(self.test_cfg.score_thr)
+                if edge_buffer > 0:
+                    edge_threshold = radius - edge_buffer
+                    pc3_dist = torch.sqrt((pc3[:, 0] - region[0]) ** 2 + (pc3[:, 1] - region[1]) ** 2)
+                    near_edge = pc3_dist > edge_threshold
+                    edge_bad = (masks & near_edge.unsqueeze(0)).any(dim=1)
+                    keep = keep & (~edge_bad)
+
+                keep_idx = torch.where(keep)[0]
+                if keep_idx.numel() == 0:
+                    continue
+
+                masks_kept = masks[keep_idx]
+                scores_kept = scores[keep_idx]
+
+                # Map kept masks from sampled points (pc3) back to region points (pc1)
+                mask_pc1_bool = ForAINetV2OneFormer3D_XAwarequery.nearest_neighbor_mapping_2(
+                    pc1, pc3, masks_kept)
+
+                # Per point in pc1, pick highest-score mask
+                pt_best_scores, pt_best_mid = (scores_kept.view(-1, 1) * mask_pc1_bool.float()).max(dim=0)
+                pts_glob = pc1_indices.cpu().numpy()
+                new_scores = pt_best_scores.cpu().numpy()
+                better_pts = new_scores > global_instance_scores[pts_glob]
+
+                if better_pts.any():
+                    global_instance_scores[pts_glob[better_pts]] = new_scores[better_pts]
+                    all_pre_ins[pts_glob[better_pts]] = max_instance + pt_best_mid[better_pts].cpu().numpy()
+
+                    mids_unique = np.unique(pt_best_mid[better_pts].cpu().numpy())
+                    for mid in mids_unique:
+                        sel_pts = mask_pc1_bool[mid].nonzero(as_tuple=True)[0].cpu().numpy()
+                        best_masks.append(
+                            (pts_glob[sel_pts], max_instance + int(mid), float(scores_kept[int(mid)])))
+
+                max_instance += masks_kept.size(0)
+
+            # Drop tiny instances
+            uniq, cnt = np.unique(all_pre_ins, return_counts=True)
+            to_kill = np.isin(all_pre_ins, uniq[(cnt < int(self.test_cfg.npoint_thr)) & (uniq != -1)])
+            all_pre_ins[to_kill] = -1
+
+            # Keep only masks that still exist after overwrite
+            unique_best_masks = []
+            for mask_points, instance_id, score in best_masks:
+                if np.any(all_pre_ins[mask_points] == instance_id):
+                    unique_best_masks.append((mask_points, instance_id, score))
+
+            merged_labels, merged_masks, merged_scores = \
+                ForAINetV2OneFormer3D_XAwarequery.merge_overlapping_instances_by_score(
+                    all_pre_ins, unique_best_masks, overlap_threshold=overlap_thr)
+
+            # Relabel to contiguous ids and build mask tensor expected by InstanceOnlyMetric
+            uniq_ids = np.unique(merged_labels)
+            uniq_ids = uniq_ids[uniq_ids >= 0]
+            if len(uniq_ids) == 0:
+                pred_masks = np.zeros((0, merged_labels.shape[0]), dtype=bool)
+                pred_scores = np.zeros((0,), dtype=np.float32)
+                pred_labels = np.zeros((0,), dtype=np.int64)
+            else:
+                pred_masks = np.stack([(merged_labels == iid) for iid in uniq_ids], axis=0).astype(bool)
+                pred_scores = np.array(
+                    [merged_scores[merged_labels == iid].max() for iid in uniq_ids],
+                    dtype=np.float32)
+                pred_labels = np.zeros((len(uniq_ids),), dtype=np.int64)
+
+            point_data = PointData(
+                pts_instance_mask=pred_masks,
+                instance_labels=pred_labels,
+                instance_scores=pred_scores)
+
+            batch_data_samples[0].pred_pts_seg = point_data
+            return batch_data_samples
+
         coordinates, features, inverse_mapping, spatial_shape = self.collate(
             batch_inputs_dict['points'])
         x = spconv.SparseConvTensor(

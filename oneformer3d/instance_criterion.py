@@ -698,7 +698,8 @@ class InstanceCriterionForAI_OneToManyMatch:
             tgt_mask = torch.zeros_like(pred_mask)  # Set the default target mask for negative samples as all zeros
             if (idx_gt != -1).any():
                 # For positive samples, assign the ground truth mask
-                tgt_mask[idx_gt != -1] = inst.sp_masks[idx_gt[idx_gt != -1]].float()  # Assign GT mask for positive samples
+                tgt_mask[idx_gt != -1] = inst.sp_masks[idx_gt[idx_gt != -1]].to(
+                    dtype=tgt_mask.dtype, device=tgt_mask.device)
             
             # Compute mask losses (both positive and negative)
             mask_bce_losses.append(F.binary_cross_entropy_with_logits(pred_mask, tgt_mask))
@@ -712,7 +713,11 @@ class InstanceCriterionForAI_OneToManyMatch:
                 if (idx_gt != -1).any():
                     # For positive samples, use IoU as the ground truth score
                     with torch.no_grad():
-                        tgt_score[idx_gt != -1] = get_iou_with_crop(pred_mask[idx_gt != -1], tgt_mask[idx_gt != -1], inst.ratio_inspoint[idx_gt[idx_gt != -1]]).unsqueeze(1)
+                        tgt_score[idx_gt != -1] = get_iou_with_crop(
+                            pred_mask[idx_gt != -1],
+                            tgt_mask[idx_gt != -1],
+                            inst.ratio_inspoint[idx_gt[idx_gt != -1]]).unsqueeze(1).to(
+                                dtype=tgt_score.dtype, device=tgt_score.device)
                 
                 # Append score loss for both positive and negative samples
                 score_losses.append(F.mse_loss(pred_score, tgt_score))
@@ -808,7 +813,8 @@ class InstanceCriterionForAI_OneToManyMatch:
             tgt_mask = torch.zeros_like(pred_mask)  # Set the default target mask for negative samples as all zeros
             if (idx_gt != -1).any():
                 # For positive samples, assign the ground truth mask
-                tgt_mask[idx_gt != -1] = inst.sp_masks[idx_gt[idx_gt != -1]].float()  # Assign GT mask for positive samples
+                tgt_mask[idx_gt != -1] = inst.sp_masks[idx_gt[idx_gt != -1]].to(
+                    dtype=tgt_mask.dtype, device=tgt_mask.device)
             
             # Compute mask losses (both positive and negative)
             mask_bce_losses.append(F.binary_cross_entropy_with_logits(pred_mask, tgt_mask))
@@ -822,7 +828,11 @@ class InstanceCriterionForAI_OneToManyMatch:
                 if (idx_gt != -1).any():
                     # For positive samples, use IoU as the ground truth score
                     with torch.no_grad():
-                        tgt_score[idx_gt != -1] = get_iou_with_crop(pred_mask[idx_gt != -1], tgt_mask[idx_gt != -1], inst.ratio_inspoint[idx_gt[idx_gt != -1]]).unsqueeze(1)
+                        tgt_score[idx_gt != -1] = get_iou_with_crop(
+                            pred_mask[idx_gt != -1],
+                            tgt_mask[idx_gt != -1],
+                            inst.ratio_inspoint[idx_gt[idx_gt != -1]]).unsqueeze(1).to(
+                                dtype=tgt_score.dtype, device=tgt_score.device)
                 
                 # Append score loss for both positive and negative samples
                 score_losses.append(F.mse_loss(pred_score, tgt_score))
@@ -981,6 +991,9 @@ class HungarianMatcher:
         for cost in self.costs:
             cost_values.append(cost(pred_instances, gt_instances))  #QueryClassificationCost, MaskBCECost, MaskDiceCost
         cost_value = torch.stack(cost_values).sum(dim=0)
+        # AMP can occasionally introduce NaN/Inf entries in early training.
+        # Sanitize costs so scipy linear_sum_assignment always sees a feasible matrix.
+        cost_value = torch.nan_to_num(cost_value, nan=1e8, posinf=1e8, neginf=-1e8)
         query_ids, object_ids = linear_sum_assignment(cost_value.cpu().numpy())
         return labels.new_tensor(query_ids), labels.new_tensor(object_ids)
 
