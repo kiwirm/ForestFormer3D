@@ -23,6 +23,21 @@ class InstanceOnlyMetric(SegMetric):
             return mask
         return np.asarray(mask)
 
+    @staticmethod
+    def _masks_from_id_map(id_map):
+        """Convert per-point instance-id map to boolean instance masks.
+
+        Background ids can be either -1 or 0 depending on the pipeline.
+        """
+        ids = np.asarray(id_map)
+        if ids.ndim != 1:
+            return None
+        uniq = np.unique(ids)
+        valid_ids = [i for i in uniq.tolist() if i not in (-1, 0)]
+        if not valid_ids:
+            return np.zeros((0, ids.shape[0]), dtype=bool)
+        return np.stack([(ids == i) for i in valid_ids], axis=0)
+
     def compute_metrics(self, results):
         logger: MMLogger = MMLogger.get_current_instance()
 
@@ -43,12 +58,25 @@ class InstanceOnlyMetric(SegMetric):
             pred_masks = pred.get('pts_instance_mask', None)
             if pred_masks is None:
                 continue
-            if isinstance(pred_masks, list):
-                # For some outputs it is a list; use first element if nested
-                pred_masks = pred_masks[0]
-            pred_masks = np.asarray(pred_masks)
+            # Model output can be:
+            # - [instance_masks(K, N), panoptic_instance_ids(N,)]
+            # - instance_masks(K, N)
+            # Prefer panoptic ids when available because they represent final
+            # per-point instance assignment after model post-processing.
+            if isinstance(pred_masks, (list, tuple)):
+                id_masks = None
+                if len(pred_masks) > 1:
+                    id_masks = self._masks_from_id_map(pred_masks[1])
+                if id_masks is not None:
+                    pred_masks = id_masks
+                else:
+                    pred_masks = np.asarray(pred_masks[0])
+            else:
+                pred_masks = np.asarray(pred_masks)
+
             if pred_masks.ndim == 1:
-                pred_masks = pred_masks[None, :]
+                id_masks = self._masks_from_id_map(pred_masks)
+                pred_masks = id_masks if id_masks is not None else pred_masks[None, :]
 
             num_pred = pred_masks.shape[0]
             num_gt = len(gt_masks)

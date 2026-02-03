@@ -163,15 +163,15 @@ test_pipeline = [
 # run settings
 train_dataloader = dict(
     batch_size=1,
-    num_workers=12,
-    prefetch_factor=10,
+    num_workers=4,
+    prefetch_factor=2,
     pin_memory=True,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='derived/infos/cass_oneformer3d_infos_train.pkl',
+        ann_file='derived/infos/scene_oneformer3d_infos_train.pkl',
         data_prefix=data_prefix,
         pipeline=train_pipeline,
         filter_empty_gt=True,
@@ -182,7 +182,7 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='derived/infos/cass_oneformer3d_infos_val.pkl',
+        ann_file='derived/infos/scene_oneformer3d_infos_val.pkl',
         data_prefix=data_prefix,
         pipeline=val_pipeline,
         box_type_3d='Depth',
@@ -193,14 +193,14 @@ test_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='derived/infos/cass_oneformer3d_infos_test.pkl',
+        ann_file='derived/infos/scene_oneformer3d_infos_test.pkl',
         data_prefix=data_prefix,
         pipeline=test_pipeline,
         box_type_3d='Depth',
         test_mode=True,
         backend_args=None))
 
-class_names = ['ground', 'wood', 'leaf']
+class_names = ['tree']
 label2cat = {i: name for i, name in enumerate(class_names)}
 metric_meta = dict(
     label2cat=label2cat,
@@ -208,8 +208,8 @@ metric_meta = dict(
     classes=class_names,
     dataset_name='ForAINetV2')
 
-sem_mapping = [0, 1, 2]
-inst_mapping = sem_mapping[1:]
+sem_mapping = [0]
+inst_mapping = [0]
 
 val_evaluator = dict(
     type='InstanceOnlyMetric',
@@ -240,8 +240,8 @@ visualizer = dict(
 
 train_cfg = dict(
     type='EpochBasedTrainLoop',
-    max_epochs=100,
-    val_interval=5)
+    max_epochs=5000,
+    val_interval=100)
 
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
