@@ -16,17 +16,17 @@ rm -f "$ROOT_DIR/data/processed/points"/cass_*.bin
 rm -f "$ROOT_DIR/data/processed/instance_mask"/cass_*.bin
 rm -f "$ROOT_DIR/data/processed/semantic_mask"/cass_*.bin
 
-LAS_INPUT="$ROOT_DIR/data/raw/las/cass/cass.segment.crop.las"
-VECTORS_SHAPE="$ROOT_DIR/data/raw/vectors/tree_crowns.shp"
-LABELED_LAS="$ROOT_DIR/data/intermediate/cass_labeled.las"
+LAS_INPUT="${LAS_INPUT:-$ROOT_DIR/data/raw/las/cass/cass.segment.crop.train.las}"
+VECTORS_SHAPE="${VECTORS_SHAPE:-$ROOT_DIR/data/raw/vectors/tree_crowns.shp}"
+LABELED_LAS="${LABELED_LAS:-$ROOT_DIR/data/intermediate/cass_labeled.las}"
 
-TILE_SIZE=30
-TRAIN_RATIO=0.8
-VAL_RATIO=0.1
-TEST_RATIO=0.1
-SPLIT_PREFIX=cass
-TARGET_CRS="EPSG:2134"
-TREE_ID_COL=tree_id
+TILE_SIZE="${TILE_SIZE:-30}"
+TRAIN_RATIO="${TRAIN_RATIO:-0.0}"
+VAL_RATIO="${VAL_RATIO:-0.0}"
+TEST_RATIO="${TEST_RATIO:-1.0}"
+SPLIT_PREFIX="${SPLIT_PREFIX:-cass}"
+TARGET_CRS="${TARGET_CRS:-EPSG:2134}"
+TREE_ID_COL="${TREE_ID_COL:-tree_id}"
 
 # 1) Assign tree_id from polygons
 python tools/datasets/assign_tree_id_from_shp.py \
@@ -56,4 +56,4 @@ python tools/datasets/preprocess_dataset.py \
 python tools/prep/build_infos.py cass \
   --extra-tag cass
 
-echo "Done. Cass data is ready for training."
+echo "Done. Cass data is ready (default split is test-only)."

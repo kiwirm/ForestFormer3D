@@ -171,13 +171,17 @@ def main():
         if not ok:
             raise RuntimeError(f"Failed to write PLY: {out_path}")
 
+    def _write_split_list(path, names):
+        content = "\n".join(names)
+        if content:
+            content += "\n"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+
     prefix = args.split_prefix
-    with open(osp.join(args.splits_dir, f"{prefix}_train_list.txt"), "w", encoding="utf-8") as f:
-        f.write("\n".join(train_list) + "\n")
-    with open(osp.join(args.splits_dir, f"{prefix}_val_list.txt"), "w", encoding="utf-8") as f:
-        f.write("\n".join(val_list) + "\n")
-    with open(osp.join(args.splits_dir, f"{prefix}_test_list.txt"), "w", encoding="utf-8") as f:
-        f.write("\n".join(test_list) + "\n")
+    _write_split_list(osp.join(args.splits_dir, f"{prefix}_train_list.txt"), train_list)
+    _write_split_list(osp.join(args.splits_dir, f"{prefix}_val_list.txt"), val_list)
+    _write_split_list(osp.join(args.splits_dir, f"{prefix}_test_list.txt"), test_list)
 
     print(
         f"Wrote {len(train_list)} train, {len(val_list)} val, {len(test_list)} test tiles. "

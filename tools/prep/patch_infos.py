@@ -203,6 +203,7 @@ def update_scannet_infos(pkl_path, out_dir):
         data_list = data_list['data_list']
     print('Start updating:')
     converted_list = []
+    ignore_class_name = set()
     for ori_info_dict in mmengine.track_iter_progress(data_list):
         if 'point_cloud' in ori_info_dict:
             temp_data_info = get_empty_standard_data_info()
@@ -262,7 +263,6 @@ def update_scannet_infos(pkl_path, out_dir):
         # TODO support camera
         # np.linalg.inv(info['axis_align_matrix'] @ extrinsic): depth2cam
         anns = ori_info_dict.get('annos', None)
-        ignore_class_name = set()
         if anns is not None:
             temp_data_info['axis_align_matrix'] = anns[
                 'axis_align_matrix'].tolist()
@@ -361,6 +361,7 @@ def update_scannet200_infos(pkl_path, out_dir):
         data_list = data_list['data_list']
     print('Start updating:')
     converted_list = []
+    ignore_class_name = set()
     for ori_info_dict in mmengine.track_iter_progress(data_list):
         if 'point_cloud' in ori_info_dict:
             temp_data_info = get_empty_standard_data_info()
@@ -419,7 +420,6 @@ def update_scannet200_infos(pkl_path, out_dir):
         # TODO support camera
         # np.linalg.inv(info['axis_align_matrix'] @ extrinsic): depth2cam
         anns = ori_info_dict.get('annos', None)
-        ignore_class_name = set()
         if anns is not None:
             temp_data_info['axis_align_matrix'] = anns[
                 'axis_align_matrix'].tolist()
@@ -479,6 +479,7 @@ def update_dataset_infos(pkl_path, out_dir, dataset):
         data_list = data_list['data_list']
     print('Start updating:')
     converted_list = []
+    ignore_class_name = set()
     for ori_info_dict in mmengine.track_iter_progress(data_list):
         if 'point_cloud' in ori_info_dict:
             temp_data_info = get_empty_standard_data_info()
@@ -535,7 +536,6 @@ def update_dataset_infos(pkl_path, out_dir, dataset):
         # TODO support camera
         # np.linalg.inv(info['axis_align_matrix'] @ extrinsic): depth2cam
         anns = ori_info_dict.get('annos', None)
-        ignore_class_name = set()
         if anns is not None:
             temp_data_info['axis_align_matrix'] = anns[
                 'axis_align_matrix'].tolist()
