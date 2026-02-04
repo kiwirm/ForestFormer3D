@@ -607,6 +607,7 @@ def update_pkl_infos(dataset, out_dir, pkl_path):
     elif dataset.lower() in {
         'original',
         'cass',
+        'scene',
         'combined',
     }:
         update_dataset_infos(pkl_path=pkl_path, out_dir=out_dir, dataset=dataset)

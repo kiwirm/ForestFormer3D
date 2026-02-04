@@ -20,8 +20,8 @@ rm -f "$ROOT_DIR/data/processed/instance_mask"/train_scene.bin "$ROOT_DIR/data/p
 rm -f "$ROOT_DIR/data/processed/semantic_mask"/train_scene.bin "$ROOT_DIR/data/processed/semantic_mask"/test_scene.bin
 rm -f "$ROOT_DIR/data/splits/scene"/scene_train_list.txt "$ROOT_DIR/data/splits/scene"/scene_val_list.txt "$ROOT_DIR/data/splits/scene"/scene_test_list.txt
 
-TRAIN_LAS_INPUT="${TRAIN_LAS_INPUT:-$ROOT_DIR/data/raw/las/cass/cass.segment.crop.train.las}"
-TEST_LAS_INPUT="${TEST_LAS_INPUT:-$ROOT_DIR/data/raw/las/cass/cass.segment.crop.test.las}"
+TRAIN_LAS_INPUT="${TRAIN_LAS_INPUT:-$ROOT_DIR/data/raw/las/cass.segment.crop.train.las}"
+TEST_LAS_INPUT="${TEST_LAS_INPUT:-$ROOT_DIR/data/raw/las/cass.segment.crop.test.las}"
 VECTORS_SHAPE="${VECTORS_SHAPE:-$ROOT_DIR/data/raw/vectors/tree_crowns.shp}"
 TRAIN_LABELED_LAS="${TRAIN_LABELED_LAS:-$ROOT_DIR/data/intermediate/train_labeled.las}"
 TEST_LABELED_LAS="${TEST_LABELED_LAS:-$ROOT_DIR/data/intermediate/test_labeled.las}"
