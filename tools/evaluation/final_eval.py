@@ -38,6 +38,10 @@ if __name__ == '__main__':
             LOG_FOUT.flush()
         print(out_str)
 
+    def safe_mean(arr):
+        arr = np.asarray(arr, dtype=float)
+        return float(np.mean(arr)) if arr.size > 0 else 0.0
+
     true_positive_classes_global = np.zeros(NUM_CLASSES_sem)
     positive_classes_global = np.zeros(NUM_CLASSES_sem)
     gt_classes_global = np.zeros(NUM_CLASSES_sem)
@@ -291,7 +295,8 @@ if __name__ == '__main__':
             PQ = np.zeros(NUM_CLASSES)
             PQStar = np.zeros(NUM_CLASSES)
             set1 = set(ins_classcount)
-            set2 = set(sem_classcount_have)
+            # Instance classes are defined on the binary semantic space.
+            set2 = set(sem_classcount_have_bi)
             set3 = set1 & set2
             ins_classcount_final = list(set3)
 
@@ -333,42 +338,43 @@ if __name__ == '__main__':
                 PQ[i_sem] = SQ[i_sem] * RQ[i_sem]
                 PQStar[i_sem] = iou_list_bi[i_sem]
 
-            if np.mean(precision[ins_classcount_final]) + np.mean(recall[ins_classcount_final]) == 0:
+            mean_prec = safe_mean(precision[ins_classcount_final])
+            mean_rec = safe_mean(recall[ins_classcount_final])
+            if (mean_prec + mean_rec) == 0:
                 F1_score = 0.0
             else:
-                F1_score = (2 * np.mean(precision[ins_classcount_final]) * np.mean(recall[ins_classcount_final])) / (
-                            np.mean(precision[ins_classcount_final]) + np.mean(recall[ins_classcount_final]))
+                F1_score = (2 * mean_prec * mean_rec) / (mean_prec + mean_rec)
 
             log_string('Instance Segmentation for Offset:', IND_LOG_FOUT)
             log_string('Instance Segmentation MUCov: {}'.format(MUCov[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation mMUCov: {}'.format(np.mean(MUCov[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation mMUCov: {}'.format(safe_mean(MUCov[ins_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation MWCov: {}'.format(MWCov[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation mMWCov: {}'.format(np.mean(MWCov[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation mMWCov: {}'.format(safe_mean(MWCov[ins_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation Precision: {}'.format(precision[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation mPrecision: {}'.format(np.mean(precision[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation mPrecision: {}'.format(mean_prec), IND_LOG_FOUT)
             log_string('Instance Segmentation Recall: {}'.format(recall[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation mRecall: {}'.format(np.mean(recall[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation mRecall: {}'.format(mean_rec), IND_LOG_FOUT)
             log_string('Instance Segmentation F1 score: {}'.format(F1_score), IND_LOG_FOUT)
             log_string('Instance Segmentation RQ: {}'.format(RQ[sem_classcount_bi]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanRQ: {}'.format(np.mean(RQ[sem_classcount_final_bi])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanRQ: {}'.format(safe_mean(RQ[sem_classcount_final_bi])), IND_LOG_FOUT)
             log_string('Instance Segmentation SQ: {}'.format(SQ[sem_classcount_bi]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanSQ: {}'.format(np.mean(SQ[sem_classcount_final_bi])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanSQ: {}'.format(safe_mean(SQ[sem_classcount_final_bi])), IND_LOG_FOUT)
             log_string('Instance Segmentation PQ: {}'.format(PQ[sem_classcount_bi]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanPQ: {}'.format(np.mean(PQ[sem_classcount_final_bi])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanPQ: {}'.format(safe_mean(PQ[sem_classcount_final_bi])), IND_LOG_FOUT)
             log_string('Instance Segmentation PQ star: {}'.format(PQStar[sem_classcount_bi]), IND_LOG_FOUT)
-            log_string('Instance Segmentation mean PQ star: {}'.format(np.mean(PQStar[sem_classcount_final_bi])), IND_LOG_FOUT)
+            log_string('Instance Segmentation mean PQ star: {}'.format(safe_mean(PQStar[sem_classcount_final_bi])), IND_LOG_FOUT)
             log_string('Instance Segmentation RQ (things): {}'.format(RQ[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanRQ (things): {}'.format(np.mean(RQ[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanRQ (things): {}'.format(safe_mean(RQ[ins_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation SQ (things): {}'.format(SQ[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanSQ (things): {}'.format(np.mean(SQ[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanSQ (things): {}'.format(safe_mean(SQ[ins_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation PQ (things): {}'.format(PQ[ins_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanPQ (things): {}'.format(np.mean(PQ[ins_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanPQ (things): {}'.format(safe_mean(PQ[ins_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation RQ (stuff): {}'.format(RQ[stuff_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanRQ (stuff): {}'.format(np.mean(RQ[stuff_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanRQ (stuff): {}'.format(safe_mean(RQ[stuff_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation SQ (stuff): {}'.format(SQ[stuff_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanSQ (stuff): {}'.format(np.mean(SQ[stuff_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanSQ (stuff): {}'.format(safe_mean(SQ[stuff_classcount_final])), IND_LOG_FOUT)
             log_string('Instance Segmentation PQ (stuff): {}'.format(PQ[stuff_classcount]), IND_LOG_FOUT)
-            log_string('Instance Segmentation meanPQ (stuff): {}'.format(np.mean(PQ[stuff_classcount_final])), IND_LOG_FOUT)
+            log_string('Instance Segmentation meanPQ (stuff): {}'.format(safe_mean(PQ[stuff_classcount_final])), IND_LOG_FOUT)
 
         true_positive_classes_global += true_positive_classes
         positive_classes_global += positive_classes
@@ -446,7 +452,8 @@ if __name__ == '__main__':
     PQ_global = np.zeros(NUM_CLASSES)
     PQStar_global = np.zeros(NUM_CLASSES)
     set1_ins_global = set(ins_classcount)
-    set2_ins_global = set(sem_classcount_have_global)
+    # Instance classes are defined on the binary semantic space.
+    set2_ins_global = set(sem_classcount_have_bi_global)
     set3_ins_global = set1_ins_global & set2_ins_global
     ins_classcount_final_global = list(set3_ins_global)
 
@@ -488,41 +495,42 @@ if __name__ == '__main__':
         PQ_global[i_sem] = SQ_global[i_sem] * RQ_global[i_sem]
         PQStar_global[i_sem] = iou_list_bi_global[i_sem]
 
-    if np.mean(precision_global[ins_classcount_final_global]) + np.mean(recall_global[ins_classcount_final_global]) == 0:
+    mean_prec_global = safe_mean(precision_global[ins_classcount_final_global])
+    mean_rec_global = safe_mean(recall_global[ins_classcount_final_global])
+    if (mean_prec_global + mean_rec_global) == 0:
         F1_score_global = 0.0
     else:
-        F1_score_global = (2 * np.mean(precision_global[ins_classcount_final_global]) * np.mean(recall_global[ins_classcount_final_global])) / (
-                    np.mean(precision_global[ins_classcount_final_global]) + np.mean(recall_global[ins_classcount_final_global]))
+        F1_score_global = (2 * mean_prec_global * mean_rec_global) / (mean_prec_global + mean_rec_global)
 
     log_string('Instance Segmentation for Offset:')
     log_string('Instance Segmentation MUCov: {}'.format(MUCov_global[ins_classcount]))
-    log_string('Instance Segmentation mMUCov: {}'.format(np.mean(MUCov_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation mMUCov: {}'.format(safe_mean(MUCov_global[ins_classcount_final_global])))
     log_string('Instance Segmentation MWCov: {}'.format(MWCov_global[ins_classcount]))
-    log_string('Instance Segmentation mMWCov: {}'.format(np.mean(MWCov_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation mMWCov: {}'.format(safe_mean(MWCov_global[ins_classcount_final_global])))
     log_string('Instance Segmentation Precision: {}'.format(precision_global[ins_classcount]))
-    log_string('Instance Segmentation mPrecision: {}'.format(np.mean(precision_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation mPrecision: {}'.format(mean_prec_global))
     log_string('Instance Segmentation Recall: {}'.format(recall_global[ins_classcount]))
-    log_string('Instance Segmentation mRecall: {}'.format(np.mean(recall_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation mRecall: {}'.format(mean_rec_global))
     log_string('Instance Segmentation F1 score: {}'.format(F1_score_global))
     log_string('Instance Segmentation RQ: {}'.format(RQ_global[sem_classcount_bi_global]))
-    log_string('Instance Segmentation meanRQ: {}'.format(np.mean(RQ_global[sem_classcount_final_bi_global])))
+    log_string('Instance Segmentation meanRQ: {}'.format(safe_mean(RQ_global[sem_classcount_final_bi_global])))
     log_string('Instance Segmentation SQ: {}'.format(SQ_global[sem_classcount_bi_global]))
-    log_string('Instance Segmentation meanSQ: {}'.format(np.mean(SQ_global[sem_classcount_final_bi_global])))
+    log_string('Instance Segmentation meanSQ: {}'.format(safe_mean(SQ_global[sem_classcount_final_bi_global])))
     log_string('Instance Segmentation PQ: {}'.format(PQ_global[sem_classcount_bi_global]))
-    log_string('Instance Segmentation meanPQ: {}'.format(np.mean(PQ_global[sem_classcount_final_bi_global])))
+    log_string('Instance Segmentation meanPQ: {}'.format(safe_mean(PQ_global[sem_classcount_final_bi_global])))
     log_string('Instance Segmentation PQ star: {}'.format(PQStar_global[sem_classcount_bi_global]))
-    log_string('Instance Segmentation mean PQ star: {}'.format(np.mean(PQStar_global[sem_classcount_final_bi_global])))
+    log_string('Instance Segmentation mean PQ star: {}'.format(safe_mean(PQStar_global[sem_classcount_final_bi_global])))
     log_string('Instance Segmentation RQ (things): {}'.format(RQ_global[ins_classcount]))
-    log_string('Instance Segmentation meanRQ (things): {}'.format(np.mean(RQ_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation meanRQ (things): {}'.format(safe_mean(RQ_global[ins_classcount_final_global])))
     log_string('Instance Segmentation SQ (things): {}'.format(SQ_global[ins_classcount]))
-    log_string('Instance Segmentation meanSQ (things): {}'.format(np.mean(SQ_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation meanSQ (things): {}'.format(safe_mean(SQ_global[ins_classcount_final_global])))
     log_string('Instance Segmentation PQ (things): {}'.format(PQ_global[ins_classcount]))
-    log_string('Instance Segmentation meanPQ (things): {}'.format(np.mean(PQ_global[ins_classcount_final_global])))
+    log_string('Instance Segmentation meanPQ (things): {}'.format(safe_mean(PQ_global[ins_classcount_final_global])))
     log_string('Instance Segmentation RQ (stuff): {}'.format(RQ_global[stuff_classcount]))
-    log_string('Instance Segmentation meanRQ (stuff): {}'.format(np.mean(RQ_global[stuff_classcount_final_global])))
+    log_string('Instance Segmentation meanRQ (stuff): {}'.format(safe_mean(RQ_global[stuff_classcount_final_global])))
     log_string('Instance Segmentation SQ (stuff): {}'.format(SQ_global[stuff_classcount]))
-    log_string('Instance Segmentation meanSQ (stuff): {}'.format(np.mean(SQ_global[stuff_classcount_final_global])))
+    log_string('Instance Segmentation meanSQ (stuff): {}'.format(safe_mean(SQ_global[stuff_classcount_final_global])))
     log_string('Instance Segmentation PQ (stuff): {}'.format(PQ_global[stuff_classcount]))
-    log_string('Instance Segmentation meanPQ (stuff): {}'.format(np.mean(PQ_global[stuff_classcount_final_global])))
+    log_string('Instance Segmentation meanPQ (stuff): {}'.format(safe_mean(PQ_global[stuff_classcount_final_global])))
 
     LOG_FOUT.close()

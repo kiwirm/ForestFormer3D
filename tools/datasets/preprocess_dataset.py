@@ -130,22 +130,22 @@ def main():
         default='data/derived/instance_data',
         help='output folder of the result.')
     parser.add_argument(
-        '--train_forainetv2_dir', default='data/labeled/plys/train_val', help='labeled PLY data directory.')
+        '--train_forainetv2_dir', default='data/labeled/train', help='labeled PLY data directory.')
     parser.add_argument(
         '--test_forainetv2_dir',
-        default='data/labeled/plys/test',
+        default='data/labeled/test',
         help='labeled PLY data directory.')
     parser.add_argument(
         '--train_scan_names_file',
-        default='data/splits/original/original_train_list.txt',
+        default='data/splits/train/train.txt',
         help='The path of the file that stores the train scan names.')
     parser.add_argument(
         '--val_scan_names_file',
-        default='data/splits/original/original_val_list.txt',
+        default='data/splits/train/train.txt',
         help='The path of the file that stores the val scan names.')
     parser.add_argument(
         '--test_scan_names_file',
-        default='data/splits/original/original_test_list.txt',
+        default='data/splits/test/test.txt',
         help='The path of the file that stores the test scan names.')
     args = parser.parse_args()
 

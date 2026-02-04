@@ -47,7 +47,7 @@ model = dict(
     decoder=dict(
         type='OneDataQueryDecoder',
         num_layers=6,
-        num_queries_1dataset=500,
+        num_queries_1dataset=128,
         num_queries_2dataset=0,
         num_classes_1dataset=num_instance_classes,
         num_classes_2dataset=num_instance_classes,
@@ -101,7 +101,7 @@ train_pipeline = [
     dict(type='GridSample', grid_size=0.16),
     dict(
         type='PointSample_',
-        num_points=800000),
+        num_points=400000),
     dict(type='SkipEmptyScene_'),
     dict(type='PointInstOnlyMapping_'),
     dict(
@@ -139,7 +139,7 @@ val_pipeline = [
     dict(type='GridSample', grid_size=0.16),
     dict(
         type='PointSample_',
-        num_points=800000),
+        num_points=400000),
     dict(type='PointInstOnlyMapping_'),
     dict(type='Pack3DDetInputs_', keys=['points', 'gt_labels_3d', 'pts_semantic_mask', 'pts_instance_mask','instance_mask'])
 ]
@@ -163,15 +163,15 @@ test_pipeline = [
 # run settings
 train_dataloader = dict(
     batch_size=1,
-    num_workers=4,
-    prefetch_factor=2,
+    num_workers=16,
+    prefetch_factor=4,
     pin_memory=True,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='derived/infos/scene_oneformer3d_infos_train.pkl',
+        ann_file='derived/infos/train.pkl',
         data_prefix=data_prefix,
         pipeline=train_pipeline,
         filter_empty_gt=True,
@@ -182,7 +182,7 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='derived/infos/scene_oneformer3d_infos_val.pkl',
+        ann_file='derived/infos/train.pkl',
         data_prefix=data_prefix,
         pipeline=val_pipeline,
         box_type_3d='Depth',
@@ -193,7 +193,7 @@ test_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='derived/infos/scene_oneformer3d_infos_test.pkl',
+        ann_file='derived/infos/test.pkl',
         data_prefix=data_prefix,
         pipeline=test_pipeline,
         box_type_3d='Depth',
@@ -217,7 +217,8 @@ val_evaluator = dict(
 test_evaluator = val_evaluator
 
 optim_wrapper = dict(
-    type='OptimWrapper',
+    type='AmpOptimWrapper',
+    loss_scale='dynamic',
     optimizer=dict(type='AdamW', lr=0.00005, weight_decay=0.05),
     clip_grad=dict(max_norm=10, norm_type=2))
 
@@ -240,7 +241,7 @@ visualizer = dict(
 
 train_cfg = dict(
     type='EpochBasedTrainLoop',
-    max_epochs=5000,
+    max_epochs=3000,
     val_interval=100)
 
 val_cfg = dict(type='ValLoop')

@@ -63,7 +63,9 @@ def main():
             f"Available: {las.point_format.extra_dimension_names}"
         )
 
-    points = np.vstack((las.x, las.y, las.z)).astype(np.float32).T
+    # Keep coordinates in float64 to preserve centimeter-level precision
+    # at large UTM magnitudes (float32 can quantize to ~0.5m here).
+    points = np.vstack((las.x, las.y, las.z)).T
     n_points = points.shape[0]
     tree_ids = np.asarray(getattr(las, args.tree_id_dim), dtype=np.int32)
     if args.semantic is None:

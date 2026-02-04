@@ -1,111 +1,138 @@
-# ForestFormer3D Single-Scene Runbook (Instance-Only)
+# ForestFormer3D Runbook (Current Repo State)
 
-This runbook documents the current single-scene workflow with RGB+I data prep and instance-only training.
-Assumes a CUDA Linux GPU machine and `.venv` is set up.
+This README reflects the current scripts/configs in this repository.
 
-## Current naming convention
-
-Configs and work dirs match by name:
-- `configs/pretrained.py` -> `work_dirs/pretrained`
-- `configs/xyz.py` -> `work_dirs/xyz`
-- `configs/xyzrgb.py` -> `work_dirs/xyzrgb`
-
-All three configs currently use:
-- `max_epochs=3000`
-- `val_interval=100`
-
-## Single-scene data pipeline
-
-Run the pipeline:
+## 1) Environment (recommended for every run)
 
 ```bash
 source .venv/bin/activate
+
 export PYTHONPATH=.
+export CUDA_VISIBLE_DEVICES=0
+
+# Prevent CPU thread oversubscription in dataloader workers
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+```
+
+## 2) Data preparation (single-scene pipeline)
+
+Run:
+
+```bash
 ./tools/run_prep
 ```
 
-What it does:
-- Uses `data/raw/las/cass/cass.segment.crop.train.las` as train scene input.
-- Uses `data/raw/las/cass/cass.segment.crop.test.las` as test scene input only if the file exists.
-- Builds one PLY scene for train and one for test (no tiles):
-  - `data/labeled/plys/train_val/train_scene.ply`
-  - `data/labeled/plys/test/test_scene.ply` (optional)
-- Writes split files:
-  - `data/splits/scene/scene_train_list.txt`
-  - `data/splits/scene/scene_val_list.txt`
-  - `data/splits/scene/scene_test_list.txt`
-- Rebuilds derived caches and info files:
-  - `data/derived/infos/scene_oneformer3d_infos_train.pkl`
-  - `data/derived/infos/scene_oneformer3d_infos_val.pkl`
-  - `data/derived/infos/scene_oneformer3d_infos_test.pkl`
+`tools/run_prep` currently:
+- reads train LAS from `data/raw/train/train.las`
+- optionally reads test LAS from `data/raw/test/test.las`
+- reads polygons from `data/raw/train/train.shp`
+- writes labeled LAS into `data/intermediate/`
+- writes PLYs into `data/labeled/train/` and `data/labeled/test/`
+- regenerates processed bins under `data/processed/`
+- regenerates infos under `data/derived/infos/train.pkl` and `data/derived/infos/test.pkl`
 
-The pipeline also auto-creates required folders if missing (`data/derived`, `data/processed`, `data/splits/scene`, `data/labeled/plys/...`, `data/intermediate`).
+Optional overrides (if needed):
+- `TRAIN_LAS_INPUT`
+- `TEST_LAS_INPUT`
+- `VECTORS_SHAPE`
+- `TRAIN_LABELED_LAS`
+- `TEST_LABELED_LAS`
+- `TARGET_CRS`
+- `TREE_ID_COL`
 
-## Workflows
+## 3) Training
 
-### 1) Pretrained inference -> eval
+### Train XYZ
 
 ```bash
-source .venv/bin/activate
-export PYTHONPATH=.
-
-CUDA_VISIBLE_DEVICES=0 python tools/training/test.py \
-  configs/pretrained.py \
-  data/models/epoch_3000_fix_spconv.pth \
-  --cfg-options test_cfg.output_dir=work_dirs/pretrained/eval
-
-python tools/evaluation/final_eval.py work_dirs/pretrained/eval
+python tools/training/train.py configs/xyz.py --work-dir work_dirs/xyz
 ```
 
-### 2) Train XYZ -> inference -> eval
+Resume:
 
 ```bash
-source .venv/bin/activate
-export PYTHONPATH=.
+python tools/training/train.py configs/xyz.py --work-dir work_dirs/xyz --resume
+```
 
-CUDA_VISIBLE_DEVICES=0 python tools/training/train.py \
-  configs/xyz.py \
-  --work-dir work_dirs/xyz
+### Train XYZRGB
 
-CUDA_VISIBLE_DEVICES=0 python tools/training/test.py \
+```bash
+python tools/training/train.py configs/xyzrgb.py --work-dir work_dirs/xyzrgb
+```
+
+Resume:
+
+```bash
+python tools/training/train.py configs/xyzrgb.py --work-dir work_dirs/xyzrgb --resume
+```
+
+## 4) Inference + evaluation
+
+### XYZ
+
+```bash
+python tools/training/test.py \
   configs/xyz.py \
   work_dirs/xyz/latest.pth \
-  --cfg-options test_cfg.output_dir=work_dirs/xyz/eval
+  --cfg-options model.test_cfg.output_dir=work_dirs/xyz/eval
 
 python tools/evaluation/final_eval.py work_dirs/xyz/eval
 ```
 
-Resume training in the same dir:
+### XYZRGB
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python tools/training/train.py \
-  configs/xyz.py \
-  --work-dir work_dirs/xyz \
-  --resume
-```
-
-### 3) Train XYZRGB -> inference -> eval
-
-```bash
-source .venv/bin/activate
-export PYTHONPATH=.
-
-CUDA_VISIBLE_DEVICES=0 python tools/training/train.py \
-  configs/xyzrgb.py \
-  --work-dir work_dirs/xyzrgb
-
-CUDA_VISIBLE_DEVICES=0 python tools/training/test.py \
+python tools/training/test.py \
   configs/xyzrgb.py \
   work_dirs/xyzrgb/latest.pth \
-  --cfg-options test_cfg.output_dir=work_dirs/xyzrgb/eval
+  --cfg-options model.test_cfg.output_dir=work_dirs/xyzrgb/eval
 
 python tools/evaluation/final_eval.py work_dirs/xyzrgb/eval
 ```
 
-## Notes
+### Pretrained checkpoint (in repo)
 
-- `configs/xyz.py` uses `use_dim=[0,1,2]` (XYZ only).
-- `configs/xyzrgb.py` uses `use_dim=[0,1,2,3,4,5,6]` (XYZ+RGB+I).
-- Both configs use anisotropic voxelization for crown-focused training: `voxel_size=[0.16, 0.16, 0.28]` with `GridSample(grid_size=0.16)`.
-- Both configs use sliding-cylinder merge for inference (`sliding_inference=True`, `radius=16`, `stride=4`, edge buffer `0.5`, overlap merge).
-- The pretrained checkpoint is semantic+instance and is not directly comparable to instance-only runs.
+```bash
+python tools/training/test.py \
+  configs/pretrained.py \
+  work_dirs/pretrained/epoch_3000_fix.pth \
+  --cfg-options model.test_cfg.output_dir=work_dirs/pretrained/eval
+
+python tools/evaluation/final_eval.py work_dirs/pretrained/eval
+```
+
+## 5) TensorBoard (all runs)
+
+```bash
+nohup tensorboard --logdir work_dirs --host 0.0.0.0 --port 6006 \
+  > work_dirs/tensorboard.log 2>&1 &
+echo $! > work_dirs/tensorboard.pid
+```
+
+Open `http://localhost:6006` (or `<server-ip>:6006`).
+
+Stop:
+
+```bash
+kill "$(cat work_dirs/tensorboard.pid)"
+```
+
+## 6) Current speed-oriented defaults (important)
+
+`configs/xyz.py`:
+- AMP enabled (`AmpOptimWrapper`)
+- `batch_size=2`
+- `num_workers=16`, `prefetch_factor=4`
+- `PointSample_.num_points=400000`
+- `num_queries_1dataset=128`
+
+`configs/xyzrgb.py`:
+- AMP enabled (`AmpOptimWrapper`)
+- `batch_size=1`
+- `num_workers=16`, `prefetch_factor=4`
+- `PointSample_.num_points=400000`
+- `num_queries_1dataset=128`
+
+Also note: resume logic in `tools/training/train.py` includes a manual checkpoint load path for robust resume in this repo.

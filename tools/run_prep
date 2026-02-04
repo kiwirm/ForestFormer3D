@@ -10,29 +10,30 @@ VENV_ACTIVATE="$ROOT_DIR/.venv/bin/activate"
 export PYTHONPATH="$ROOT_DIR"
 
 echo "Cleaning single-scene outputs (PLYs, derived arrays, processed bins, infos)..."
-rm -f "$ROOT_DIR/data/labeled/plys/train_val/"train_scene.ply
-rm -f "$ROOT_DIR/data/labeled/plys/test/"test_scene.ply
-rm -f "$ROOT_DIR/data/derived/instance_data"/train_scene_*.npy
-rm -f "$ROOT_DIR/data/derived/instance_data"/test_scene_*.npy
-rm -f "$ROOT_DIR/data/derived/infos"/scene_oneformer3d_infos_*.pkl
-rm -f "$ROOT_DIR/data/processed/points"/train_scene.bin "$ROOT_DIR/data/processed/points"/test_scene.bin
-rm -f "$ROOT_DIR/data/processed/instance_mask"/train_scene.bin "$ROOT_DIR/data/processed/instance_mask"/test_scene.bin
-rm -f "$ROOT_DIR/data/processed/semantic_mask"/train_scene.bin "$ROOT_DIR/data/processed/semantic_mask"/test_scene.bin
-rm -f "$ROOT_DIR/data/splits/scene"/scene_train_list.txt "$ROOT_DIR/data/splits/scene"/scene_val_list.txt "$ROOT_DIR/data/splits/scene"/scene_test_list.txt
+rm -f "$ROOT_DIR/data/labeled/train/"train.ply
+rm -f "$ROOT_DIR/data/labeled/test/"test.ply
+rm -f "$ROOT_DIR/data/derived/instance_data"/train_*.npy
+rm -f "$ROOT_DIR/data/derived/instance_data"/test_*.npy
+rm -f "$ROOT_DIR/data/derived/infos"/train.pkl "$ROOT_DIR/data/derived/infos"/test.pkl
+rm -f "$ROOT_DIR/data/processed/points"/train.bin "$ROOT_DIR/data/processed/points"/test.bin
+rm -f "$ROOT_DIR/data/processed/instance_mask"/train.bin "$ROOT_DIR/data/processed/instance_mask"/test.bin
+rm -f "$ROOT_DIR/data/processed/semantic_mask"/train.bin "$ROOT_DIR/data/processed/semantic_mask"/test.bin
+rm -f "$ROOT_DIR/data/splits/train"/train.txt "$ROOT_DIR/data/splits/test"/test.txt
 
-TRAIN_LAS_INPUT="${TRAIN_LAS_INPUT:-$ROOT_DIR/data/raw/las/cass.segment.crop.train.las}"
-TEST_LAS_INPUT="${TEST_LAS_INPUT:-$ROOT_DIR/data/raw/las/cass.segment.crop.test.las}"
-VECTORS_SHAPE="${VECTORS_SHAPE:-$ROOT_DIR/data/raw/vectors/tree_crowns.shp}"
-TRAIN_LABELED_LAS="${TRAIN_LABELED_LAS:-$ROOT_DIR/data/intermediate/train_labeled.las}"
-TEST_LABELED_LAS="${TEST_LABELED_LAS:-$ROOT_DIR/data/intermediate/test_labeled.las}"
+TRAIN_LAS_INPUT="${TRAIN_LAS_INPUT:-$ROOT_DIR/data/raw/train/train.las}"
+TEST_LAS_INPUT="${TEST_LAS_INPUT:-$ROOT_DIR/data/raw/test/test.las}"
+VECTORS_SHAPE="${VECTORS_SHAPE:-$ROOT_DIR/data/raw/train/train.shp}"
+TRAIN_LABELED_LAS="${TRAIN_LABELED_LAS:-$ROOT_DIR/data/intermediate/train.las}"
+TEST_LABELED_LAS="${TEST_LABELED_LAS:-$ROOT_DIR/data/intermediate/test.las}"
 
 TARGET_CRS="${TARGET_CRS:-EPSG:2134}"
 TREE_ID_COL="${TREE_ID_COL:-tree_id}"
-TRAIN_SCENE_NAME="${TRAIN_SCENE_NAME:-train_scene}"
-TEST_SCENE_NAME="${TEST_SCENE_NAME:-test_scene}"
-SPLITS_DIR="$ROOT_DIR/data/splits/scene"
-TRAIN_PLY_DIR="$ROOT_DIR/data/labeled/plys/train_val"
-TEST_PLY_DIR="$ROOT_DIR/data/labeled/plys/test"
+TRAIN_SCENE_NAME="${TRAIN_SCENE_NAME:-train}"
+TEST_SCENE_NAME="${TEST_SCENE_NAME:-test}"
+TRAIN_SPLITS_DIR="$ROOT_DIR/data/splits/train"
+TEST_SPLITS_DIR="$ROOT_DIR/data/splits/test"
+TRAIN_PLY_DIR="$ROOT_DIR/data/labeled/train"
+TEST_PLY_DIR="$ROOT_DIR/data/labeled/test"
 DERIVED_INSTANCE_DIR="$ROOT_DIR/data/derived/instance_data"
 DERIVED_INFOS_DIR="$ROOT_DIR/data/derived/infos"
 PROCESSED_POINTS_DIR="$ROOT_DIR/data/processed/points"
@@ -41,7 +42,8 @@ PROCESSED_SEMANTIC_MASK_DIR="$ROOT_DIR/data/processed/semantic_mask"
 INTERMEDIATE_DIR="$ROOT_DIR/data/intermediate"
 
 mkdir -p \
-  "$SPLITS_DIR" \
+  "$TRAIN_SPLITS_DIR" \
+  "$TEST_SPLITS_DIR" \
   "$TRAIN_PLY_DIR" \
   "$TEST_PLY_DIR" \
   "$DERIVED_INSTANCE_DIR" \
@@ -64,10 +66,9 @@ python tools/datasets/las_to_ply.py \
   "$TRAIN_PLY_DIR/$TRAIN_SCENE_NAME.ply"
 
 # Train/val both point at the single train scene.
-printf "%s\n" "$TRAIN_SCENE_NAME" > "$SPLITS_DIR/scene_train_list.txt"
-printf "%s\n" "$TRAIN_SCENE_NAME" > "$SPLITS_DIR/scene_val_list.txt"
+printf "%s\n" "$TRAIN_SCENE_NAME" > "$TRAIN_SPLITS_DIR/train.txt"
 
-# 2) Optional test scene: only process if cass.segment.crop.test.las exists
+# 2) Optional test scene: process if test LAS exists
 if [[ -f "$TEST_LAS_INPUT" ]]; then
   python tools/datasets/assign_tree_id_from_shp.py \
     --las "$TEST_LAS_INPUT" \
@@ -80,20 +81,21 @@ if [[ -f "$TEST_LAS_INPUT" ]]; then
     "$TEST_LABELED_LAS" \
     "$TEST_PLY_DIR/$TEST_SCENE_NAME.ply"
 
-  printf "%s\n" "$TEST_SCENE_NAME" > "$SPLITS_DIR/scene_test_list.txt"
+  printf "%s\n" "$TEST_SCENE_NAME" > "$TEST_SPLITS_DIR/test.txt"
 else
-  : > "$SPLITS_DIR/scene_test_list.txt"
-  echo "Test LAS not found at $TEST_LAS_INPUT; scene_test_list.txt left empty."
+  : > "$TEST_SPLITS_DIR/test.txt"
+  echo "Test LAS not found at $TEST_LAS_INPUT; test.txt left empty."
 fi
 
 # 3) Build derived arrays / bins
 python tools/datasets/preprocess_dataset.py \
-  --train_scan_names_file data/splits/scene/scene_train_list.txt \
-  --val_scan_names_file data/splits/scene/scene_val_list.txt \
-  --test_scan_names_file data/splits/scene/scene_test_list.txt
+  --train_forainetv2_dir data/labeled/train \
+  --test_forainetv2_dir data/labeled/test \
+  --train_scan_names_file data/splits/train/train.txt \
+  --val_scan_names_file data/splits/train/train.txt \
+  --test_scan_names_file data/splits/test/test.txt
 
 # 4) Build PKL infos
-python tools/prep/build_infos.py scene \
-  --extra-tag scene
+python tools/prep/build_infos.py scene
 
 echo "Done. Single-scene data is ready."

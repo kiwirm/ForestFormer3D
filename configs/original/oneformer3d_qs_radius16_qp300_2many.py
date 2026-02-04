@@ -77,11 +77,11 @@ model = dict(
 
 # dataset settings
 dataset_type = 'ForAINetV2SegDataset_'
-data_root_forainetv2 = 'data/ForAINetV2/'
+data_root_forainetv2 = 'data/'
 data_prefix = dict(
-    pts='points',
-    pts_instance_mask='instance_mask',
-    pts_semantic_mask='semantic_mask')
+    pts='',
+    pts_instance_mask='',
+    pts_semantic_mask='')
 
 train_pipeline = [
     dict(
@@ -171,7 +171,7 @@ train_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='forainetv2_oneformer3d_infos_train.pkl',
+        ann_file='derived/infos/train.pkl',
         data_prefix=data_prefix,
         pipeline=train_pipeline,
         filter_empty_gt=True,
@@ -182,7 +182,7 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='forainetv2_oneformer3d_infos_val.pkl',
+        ann_file='derived/infos/train.pkl',
         data_prefix=data_prefix,
         pipeline=val_pipeline,
         box_type_3d='Depth',
@@ -193,7 +193,7 @@ test_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root_forainetv2,
-        ann_file='forainetv2_oneformer3d_infos_test.pkl',
+        ann_file='derived/infos/test.pkl',
         data_prefix=data_prefix,
         pipeline=test_pipeline,
         box_type_3d='Depth',

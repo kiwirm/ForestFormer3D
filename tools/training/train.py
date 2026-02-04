@@ -3,11 +3,14 @@ import argparse
 import logging
 import os
 import os.path as osp
+import types
 
 from mmengine.config import Config, DictAction
 from mmengine.logging import print_log
+from mmengine.model import is_model_wrapper
 from mmengine.registry import RUNNERS
-from mmengine.runner import Runner
+from mmengine.runner import Runner, find_latest_checkpoint
+import torch
 
 from mmdet3d.utils import replace_ceph_backend
 
@@ -131,6 +134,96 @@ def main():
         # build customized runner from the registry
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
+
+    def _copy_checkpoint_to_model(model, checkpoint_state):
+        model_state = model.state_dict()
+        loaded = 0
+        permuted = 0
+        missing = 0
+        skipped = 0
+        perms = (
+            (0, 2, 3, 4, 1),  # (out,in,k,k,k) -> (out,k,k,k,in)
+            (1, 2, 3, 4, 0),  # (in,out,k,k,k) -> (out,k,k,k,in)
+            (4, 0, 1, 2, 3),  # (k,k,k,in,out) -> (out,k,k,k,in)
+        )
+
+        for key, dst in model_state.items():
+            src = checkpoint_state.get(key)
+            if src is None:
+                src = checkpoint_state.get(f'module.{key}')
+            if src is None:
+                missing += 1
+                continue
+            if not torch.is_tensor(src):
+                skipped += 1
+                continue
+            if src.shape == dst.shape:
+                dst.copy_(src.to(device=dst.device, dtype=dst.dtype))
+                loaded += 1
+                continue
+            if src.ndim == 5 and dst.ndim == 5:
+                matched = False
+                for perm in perms:
+                    if src.permute(perm).shape == dst.shape:
+                        dst.copy_(src.permute(perm).contiguous().to(device=dst.device, dtype=dst.dtype))
+                        permuted += 1
+                        matched = True
+                        break
+                if matched:
+                    continue
+            skipped += 1
+        return loaded, permuted, missing, skipped
+
+    def _load_or_resume_with_manual_spconv(self):
+        if self._has_loaded:
+            return None
+
+        resume_from = None
+        if self._resume and self._load_from is None:
+            resume_from = find_latest_checkpoint(self.work_dir)
+            self.logger.info(f'Auto resumed from the latest checkpoint {resume_from}.')
+        elif self._resume and self._load_from is not None:
+            resume_from = self._load_from
+
+        ckpt_path = resume_from if resume_from is not None else self._load_from
+        if ckpt_path is None:
+            return None
+
+        checkpoint = torch.load(ckpt_path, map_location='cpu')
+        state = checkpoint.get('state_dict', checkpoint.get('model', checkpoint))
+        model = self.model.module if is_model_wrapper(self.model) else self.model
+
+        loaded, permuted, missing, skipped = _copy_checkpoint_to_model(model, state)
+        self.logger.info(
+            f'Manual checkpoint load: loaded={loaded}, permuted={permuted}, '
+            f'missing={missing}, skipped={skipped}.')
+
+        if resume_from is not None:
+            meta = checkpoint.get('meta', {})
+            self.train_loop._epoch = meta.get('epoch', 0)
+            self.train_loop._iter = meta.get('iter', 0)
+
+            if 'message_hub' in checkpoint:
+                self.message_hub.load_state_dict(checkpoint['message_hub'])
+            if 'optimizer' in checkpoint:
+                self.optim_wrapper.load_state_dict(checkpoint['optimizer'])
+
+            if self.param_schedulers is not None and 'param_schedulers' in checkpoint:
+                if isinstance(self.param_schedulers, dict):
+                    for name, schedulers in self.param_schedulers.items():
+                        for scheduler, ckpt_scheduler in zip(
+                                schedulers, checkpoint['param_schedulers'][name]):
+                            scheduler.load_state_dict(ckpt_scheduler)
+                else:
+                    for scheduler, ckpt_scheduler in zip(
+                            self.param_schedulers, checkpoint['param_schedulers']):
+                        scheduler.load_state_dict(ckpt_scheduler)
+
+            self.logger.info(f'resumed epoch: {self.epoch}, iter: {self.iter}')
+
+        self._has_loaded = True
+
+    runner.load_or_resume = types.MethodType(_load_or_resume_with_manual_spconv, runner)
 
     # start training
     runner.train()

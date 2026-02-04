@@ -82,12 +82,39 @@ class UnifiedSegMetric(SegMetric):
         all_mean_cov_global = [[] for _ in range(NUM_CLASSES_BINARY)]
         all_mean_weighted_cov_global = [[] for _ in range(NUM_CLASSES_BINARY)]
 
+        length_mismatch_samples = 0
+        length_mismatch_points = 0
+
         for eval_ann, single_pred_results in results:
             # Get GT and Pred labels, and shift them by 1 (0 is ignored)
-            sem_gt_i = eval_ann['pts_semantic_mask'] + 1
-            sem_pre_i = single_pred_results['pts_semantic_mask'][1] + 1
-            ins_gt_i = eval_ann['pts_instance_mask']
-            ins_pre_i = single_pred_results['pts_instance_mask'][1]
+            sem_gt_i = np.asarray(eval_ann['pts_semantic_mask']) + 1
+            sem_pre_i = np.asarray(single_pred_results['pts_semantic_mask'][1]) + 1
+            ins_gt_i = np.asarray(eval_ann['pts_instance_mask'])
+            ins_pre_i = np.asarray(single_pred_results['pts_instance_mask'][1])
+
+            # Some prediction paths can return point arrays with small length
+            # mismatches; evaluate on the shared prefix instead of crashing.
+            common_len = min(
+                sem_gt_i.shape[0],
+                sem_pre_i.shape[0],
+                ins_gt_i.shape[0],
+                ins_pre_i.shape[0],
+            )
+            if common_len == 0:
+                continue
+            if not (
+                sem_gt_i.shape[0] == sem_pre_i.shape[0] ==
+                ins_gt_i.shape[0] == ins_pre_i.shape[0]
+            ):
+                length_mismatch_samples += 1
+                length_mismatch_points += (
+                    max(sem_gt_i.shape[0], sem_pre_i.shape[0], ins_gt_i.shape[0], ins_pre_i.shape[0])
+                    - common_len
+                )
+                sem_gt_i = sem_gt_i[:common_len]
+                sem_pre_i = sem_pre_i[:common_len]
+                ins_gt_i = ins_gt_i[:common_len]
+                ins_pre_i = ins_pre_i[:common_len]
 
             # Semantic Segmentation Evaluation
             for j in range(sem_gt_i.shape[0]):
@@ -233,6 +260,10 @@ class UnifiedSegMetric(SegMetric):
         log_str += f"mPrecision: {metrics['mPrecision']:.4f}, mRecall: {metrics['mRecall']:.4f}, F1: {metrics['F1']:.4f}\n"
         log_str += f"mMUCov: {metrics['mMUCov']:.4f}, mMWCov: {metrics['mMWCov']:.4f}"
         logger.info(log_str)
+        if length_mismatch_samples > 0:
+            logger.warning(
+                'UnifiedSegMetric truncated mismatched point arrays in '
+                f'{length_mismatch_samples} sample(s), total dropped points={length_mismatch_points}.'
+            )
         
         return metrics
-

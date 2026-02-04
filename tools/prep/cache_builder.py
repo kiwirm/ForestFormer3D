@@ -26,13 +26,7 @@ class DatasetCacheBuilder(object):
             for i, treeid in enumerate(list(self.cat_ids))
         }
         assert split in ['train', 'val', 'test']
-        if split_prefix:
-            split_dir = osp.join(self.root_dir, 'splits', split_prefix)
-            split_name = f'{split_prefix}_{split}_list.txt'
-        else:
-            split_dir = osp.join(self.root_dir, 'splits', 'original')
-            split_name = f'original_{split}_list.txt'
-        split_file = osp.join(split_dir, split_name)
+        split_file = self._resolve_split_file(split, split_prefix)
         mmengine.check_file_exist(split_file)
         self.sample_id_list = mmengine.list_from_file(split_file)
         self.test_mode = (split == 'test')
@@ -41,6 +35,32 @@ class DatasetCacheBuilder(object):
         self.points_out_dir = osp.join(self.save_path, 'processed', 'points')
         self.instance_mask_out_dir = osp.join(self.save_path, 'processed', 'instance_mask')
         self.semantic_mask_out_dir = osp.join(self.save_path, 'processed', 'semantic_mask')
+
+    def _resolve_split_file(self, split, split_prefix):
+        split_candidates = [
+            osp.join(self.root_dir, 'splits', split, f'{split}.txt'),
+            osp.join(self.root_dir, 'splits', split, f'{split}_list.txt'),
+        ]
+        if split == 'val':
+            split_candidates.extend([
+                osp.join(self.root_dir, 'splits', 'train', 'train.txt'),
+                osp.join(self.root_dir, 'splits', 'train', 'train_list.txt'),
+            ])
+
+        if split_prefix:
+            split_candidates.extend([
+                osp.join(self.root_dir, 'splits', split_prefix, f'{split_prefix}_{split}_list.txt'),
+                osp.join(self.root_dir, 'splits', split_prefix, f'{split}.txt'),
+            ])
+        else:
+            split_candidates.append(
+                osp.join(self.root_dir, 'splits', 'original', f'original_{split}_list.txt')
+            )
+
+        for candidate in split_candidates:
+            if osp.exists(candidate):
+                return candidate
+        return split_candidates[0]
 
     def __len__(self):
         return len(self.sample_id_list)

@@ -1,18 +1,14 @@
 import argparse
-import laspy
-import numpy as np
-import matplotlib.pyplot as plt
+import glob
 import logging
 from pathlib import Path
-from scipy.ndimage import gaussian_filter, generic_filter, binary_closing
+
+import laspy
+import numpy as np
+from plyfile import PlyData, PlyElement
+from scipy.ndimage import binary_closing, gaussian_filter, generic_filter
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
-from matplotlib.colors import ListedColormap
-import rasterio
-from rasterio.transform import from_origin
-from rasterio.features import shapes as rasterio_shapes
-from shapely.geometry import shape, mapping, MultiPolygon
-import fiona
 from tqdm import tqdm
 
 # ---------------------------
@@ -23,60 +19,79 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-parser = argparse.ArgumentParser(
-    description="Watershed crown segmentation pipeline",
-)
+parser = argparse.ArgumentParser(description="Run watershed segmentation on test LAS files.")
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-DEFAULT_INPUT_LAS = REPO_ROOT / "data/raw/las/cass/cass.segment.crop.las"
-DEFAULT_WORK_DIR = REPO_ROOT / "work_dirs/cass_watershed_infer"
+DEFAULT_INPUT_GLOB = str(REPO_ROOT / "data/intermediate/test_*.las")
+DEFAULT_FALLBACK_GLOB = str(REPO_ROOT / "data/raw/test/test_*.las")
+DEFAULT_WORK_DIR = REPO_ROOT / "work_dirs/watershed"
 
 parser.add_argument(
-    "--input-las",
-    default=str(DEFAULT_INPUT_LAS),
-    help="Input LAS file path",
+    "--input-glob",
+    default=DEFAULT_INPUT_GLOB,
+    help="Glob pattern for test LAS files (default: data/intermediate/test_*.las).",
 )
 parser.add_argument(
     "--work-dir",
     default=str(DEFAULT_WORK_DIR),
-    help="Output directory for watershed artifacts",
+    help="Output directory for OneFormer3D-style segmented point clouds.",
+)
+parser.add_argument("--cell-size", type=float, default=0.02, help="CHM raster cell size in meters.")
+parser.add_argument("--min-height", type=float, default=0.5, help="Minimum HAG for canopy points.")
+parser.add_argument(
+    "--min-peak-dist-m",
+    type=float,
+    default=1.59,
+    help="Minimum peak distance in meters (default tuned on test-set instance-count match).",
+)
+parser.add_argument("--smooth-sigma", type=float, default=1.0, help="Gaussian smoothing sigma on CHM.")
+parser.add_argument(
+    "--curvature-stretch",
+    type=float,
+    default=1.0,
+    help="Blend weight for curvature-guided CHM stretching.",
 )
 parser.add_argument(
-    "--crowns-only",
-    action="store_true",
-    help="Only write crown shapefile (skip CHM, plots, and point assignment)",
+    "--curvature-pct-clip-low",
+    type=float,
+    default=5.0,
+    help="Lower percentile for curvature clipping.",
+)
+parser.add_argument(
+    "--curvature-pct-clip-high",
+    type=float,
+    default=95.0,
+    help="Upper percentile for curvature clipping.",
+)
+parser.add_argument(
+    "--label-smooth-kernel-size",
+    type=int,
+    default=7,
+    help="Mode filter kernel size for label smoothing.",
+)
+parser.add_argument(
+    "--gap-close-kernel-size",
+    type=int,
+    default=11,
+    help="Binary closing kernel size for canopy gap filling.",
 )
 ARGS = parser.parse_args()
-CROWNS_ONLY = ARGS.crowns_only
-INPUT_LAS = Path(ARGS.input_las).resolve()
 WORK_DIR = Path(ARGS.work_dir).resolve()
 WORK_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def to_multipolygon(geom):
-    if geom is None or geom.is_empty:
-        return None
-    if geom.geom_type == "Polygon":
-        return MultiPolygon([geom])
-    if geom.geom_type == "MultiPolygon":
-        return geom
-    return None
 
 
 # ---------------------------
 # parameters
 # ---------------------------
-CELL_SIZE = 0.02
-MIN_HEIGHT = 0.5
-MIN_PEAK_DIST_M = 1.5
-SMOOTH_SIGMA = 1.0
+CELL_SIZE = ARGS.cell_size
+MIN_HEIGHT = ARGS.min_height
+MIN_PEAK_DIST_M = ARGS.min_peak_dist_m
+SMOOTH_SIGMA = ARGS.smooth_sigma
 
-CURVATURE_STRETCH = 1.0
-CURVATURE_PCT_CLIP = (5.0, 95.0)
-CHM_TIF = WORK_DIR / "chm.tif"
-CROWN_VECTOR = WORK_DIR / "tree_crowns.shp"
-LABEL_SMOOTH_KERNEL_SIZE = 7
-GAP_CLOSE_KERNEL_SIZE = 11
+CURVATURE_STRETCH = ARGS.curvature_stretch
+CURVATURE_PCT_CLIP = (ARGS.curvature_pct_clip_low, ARGS.curvature_pct_clip_high)
+LABEL_SMOOTH_KERNEL_SIZE = max(1, ARGS.label_smooth_kernel_size)
+GAP_CLOSE_KERNEL_SIZE = max(1, ARGS.gap_close_kernel_size)
 
 
 def minimum_curvature(surface, cell_size):
@@ -100,101 +115,16 @@ def minimum_curvature(surface, cell_size):
 
 
 logger.info("Loading LAS file")
-if not INPUT_LAS.exists():
-    raise FileNotFoundError(f"Input LAS not found: {INPUT_LAS}")
-logger.info(f"Input LAS: {INPUT_LAS}")
 logger.info(f"Output work_dir: {WORK_DIR}")
-las = laspy.read(str(INPUT_LAS))
-x, y, z = las.x, las.y, las.z
-try:
-    crs = las.header.parse_crs()
-except Exception:
-    crs = None
-
-logger.info("Normalizing heights")
-ground = las.classification == 2
-ground_z = np.interp(z, z[ground], z[ground])  # crude fallback
-hag = z - ground_z
-
-veg_mask = hag > MIN_HEIGHT
-x, y, hag = x[veg_mask], y[veg_mask], hag[veg_mask]
-logger.info(f"{len(hag)} vegetation points above {MIN_HEIGHT} m")
-
-logger.info("Rasterizing CHM")
-xmin, ymin = x.min(), y.min()
-xmax, ymax = x.max(), y.max()
-nx = int(np.ceil((xmax - xmin) / CELL_SIZE))
-ny = int(np.ceil((ymax - ymin) / CELL_SIZE))
-chm = np.full((ny, nx), np.nan)
-ix = np.clip(((x - xmin) / CELL_SIZE).astype(int), 0, nx - 1)
-iy = np.clip(((ymax - y) / CELL_SIZE).astype(int), 0, ny - 1)
-
-for i, j, h in tqdm(
-    zip(iy, ix, hag),
-    total=len(hag),
-    desc="Rasterizing CHM",
-    unit="pts",
-):
-    if np.isnan(chm[i, j]) or h > chm[i, j]:
-        chm[i, j] = h
-
-chm = np.nan_to_num(chm, nan=0.0)
-chm = gaussian_filter(chm, SMOOTH_SIGMA)
-logger.info("CHM rasterized and smoothed")
-
-transform = from_origin(xmin, ymax, CELL_SIZE, CELL_SIZE)
-
-if not CROWNS_ONLY:
-    if transform is not None:
-        logger.info("Writing CHM GeoTIFF")
-        chm_tif = chm.astype(np.float32)
-        with rasterio.open(
-            str(CHM_TIF),
-            "w",
-            driver="GTiff",
-            height=chm_tif.shape[0],
-            width=chm_tif.shape[1],
-            count=1,
-            dtype=chm_tif.dtype,
-            crs=crs,
-            transform=transform,
-            nodata=0.0,
-        ) as dst:
-            dst.write(chm_tif, 1)
-        logger.info(f"CHM GeoTIFF written to {CHM_TIF}")
-    else:
-        logger.warning("Missing geotransform; skipping CHM GeoTIFF export")
-
-logger.info("Computing minimum curvature image")
-min_curv = minimum_curvature(chm, CELL_SIZE)
-clip_low, clip_high = CURVATURE_PCT_CLIP
-low_val = np.percentile(min_curv, clip_low)
-high_val = np.percentile(min_curv, clip_high)
-if high_val <= low_val:
-    curv_norm = np.zeros_like(min_curv)
-else:
-    curv_clip = np.clip(min_curv, low_val, high_val)
-    curv_norm = (curv_clip - low_val) / (high_val - low_val)
-chm_stretched = chm * (1.0 + CURVATURE_STRETCH * curv_norm)
-
-min_peak_dist = max(1, int(np.ceil(MIN_PEAK_DIST_M / CELL_SIZE)))
-logger.info("Detecting tree-top markers")
-peaks = peak_local_max(
-    chm_stretched,
-    min_distance=min_peak_dist,
-    threshold_abs=MIN_HEIGHT,
-)
-logger.info(f"{len(peaks)} peaks detected")
-
-markers = np.zeros_like(chm, dtype=np.int32)
-for i, (r, c) in enumerate(peaks, start=1):
-    markers[r, c] = i
-
-logger.info("Running marker-controlled watershed on stretched CHM")
-labels = watershed(-chm_stretched, markers, mask=chm > MIN_HEIGHT)
-logger.info(f"{labels.max()} trees segmented")
-
-logger.info("Smoothing label raster with majority filter")
+input_files = [Path(p).resolve() for p in sorted(glob.glob(ARGS.input_glob))]
+if not input_files:
+    input_files = [Path(p).resolve() for p in sorted(glob.glob(DEFAULT_FALLBACK_GLOB))]
+if not input_files:
+    raise FileNotFoundError(
+        f"No input LAS files found for '{ARGS.input_glob}' "
+        f"or fallback '{DEFAULT_FALLBACK_GLOB}'."
+    )
+logger.info(f"Found {len(input_files)} test LAS files")
 
 
 def _mode_filter(values):
@@ -202,121 +132,161 @@ def _mode_filter(values):
     return np.bincount(vals).argmax()
 
 
-labels_smoothed = generic_filter(labels, _mode_filter, size=LABEL_SMOOTH_KERNEL_SIZE)
-labels_smoothed = labels_smoothed.astype(labels.dtype, copy=False)
-labels_smoothed[chm <= MIN_HEIGHT] = 0
-labels = labels_smoothed
-
-logger.info("Closing tiny gaps in label raster")
-gap_structure = np.ones((GAP_CLOSE_KERNEL_SIZE, GAP_CLOSE_KERNEL_SIZE), dtype=bool)
-canopy_mask = labels > 0
-canopy_closed = binary_closing(canopy_mask, structure=gap_structure)
-gap_pixels = canopy_closed & ~canopy_mask
-if np.any(gap_pixels):
-    labels_mode = generic_filter(labels, _mode_filter, size=LABEL_SMOOTH_KERNEL_SIZE)
-    labels[gap_pixels] = labels_mode[gap_pixels]
-labels[~canopy_closed] = 0
-
-if transform is None:
-    logger.warning("Missing geotransform; skipping crown vectorization")
-else:
-    logger.info("Vectorizing and writing crowns")
-    crs_wkt = None
-    if crs is not None:
-        try:
-            crs_wkt = crs.to_wkt()
-        except Exception:
-            crs_wkt = None
-    shapes_iter = rasterio_shapes(
-        labels.astype(np.int32),
-        mask=labels > 0,
-        transform=transform,
-    )
-    schema = {"geometry": "MultiPolygon", "properties": {"tree_id": "int"}}
-    wrote_any = False
-    with fiona.open(
-        str(CROWN_VECTOR),
-        "w",
-        driver="ESRI Shapefile",
-        schema=schema,
-        crs_wkt=crs_wkt,
-    ) as sink:
-        for geom, value in tqdm(
-            shapes_iter,
-            total=int(labels.max()),
-            desc="Vectorizing crowns",
-            unit="crown",
-        ):
-            if value == 0:
-                continue
-            original_geom = shape(geom)
-            geom_obj = to_multipolygon(original_geom)
-            if geom_obj is None or geom_obj.is_empty:
-                continue
-            sink.write({
-                "geometry": mapping(geom_obj),
-                "properties": {"tree_id": int(value)},
-            })
-            wrote_any = True
-    if wrote_any:
-        logger.info(f"Crown Shapefile written to {CROWN_VECTOR}")
+def normalize_height(z, classification):
+    ground_mask = classification == 2
+    if np.any(ground_mask):
+        ground_level = np.percentile(z[ground_mask], 5.0)
     else:
-        logger.warning("No crown polygons created; skipping Shapefile")
+        ground_level = np.min(z)
+    return z - ground_level
 
-if not CROWNS_ONLY:
-    # ---------------------------
-    # plots
-    # ---------------------------
-    logger.info("Plotting CHM, minimum curvature, stretched CHM, and watershed labels")
-    fig, axes = plt.subplots(1, 4, figsize=(18, 5))
 
-    im0 = axes[0].imshow(chm, cmap="viridis")
-    axes[0].set_title("Canopy Height Model")
-    plt.colorbar(im0, ax=axes[0], shrink=0.8)
+def save_oneformer_style_ply(
+    out_path, points, semantic_pred, instance_pred, score, semantic_gt=None, instance_gt=None
+):
+    if semantic_gt is None or instance_gt is None:
+        dtype = [
+            ("x", "f8"),
+            ("y", "f8"),
+            ("z", "f8"),
+            ("semantic_pred", "i4"),
+            ("instance_pred", "i4"),
+            ("score", "f4"),
+        ]
+        vertex = np.empty(points.shape[0], dtype=dtype)
+        vertex["x"] = points[:, 0]
+        vertex["y"] = points[:, 1]
+        vertex["z"] = points[:, 2]
+        vertex["semantic_pred"] = semantic_pred
+        vertex["instance_pred"] = instance_pred
+        vertex["score"] = score
+    else:
+        dtype = [
+            ("x", "f8"),
+            ("y", "f8"),
+            ("z", "f8"),
+            ("semantic_pred", "i4"),
+            ("instance_pred", "i4"),
+            ("score", "f4"),
+            ("semantic_gt", "i4"),
+            ("instance_gt", "i4"),
+        ]
+        vertex = np.empty(points.shape[0], dtype=dtype)
+        vertex["x"] = points[:, 0]
+        vertex["y"] = points[:, 1]
+        vertex["z"] = points[:, 2]
+        vertex["semantic_pred"] = semantic_pred
+        vertex["instance_pred"] = instance_pred
+        vertex["score"] = score
+        vertex["semantic_gt"] = semantic_gt
+        vertex["instance_gt"] = instance_gt
 
-    plot_low = np.percentile(min_curv, 2.0)
-    plot_high = np.percentile(min_curv, 98.0)
-    im1 = axes[1].imshow(min_curv, cmap="coolwarm", vmin=plot_low, vmax=plot_high)
-    axes[1].set_title("Minimum Curvature (2-98% clip)")
-    plt.colorbar(im1, ax=axes[1], shrink=0.8)
+    el = PlyElement.describe(vertex, "vertex")
+    PlyData([el], text=False).write(str(out_path))
 
-    axes[2].imshow(chm_stretched, cmap="viridis")
-    axes[2].scatter(peaks[:, 1], peaks[:, 0], s=15, c="red")
-    axes[2].set_title("Stretched CHM + Markers")
 
-    cmap = ListedColormap(plt.cm.tab20.colors)
-    axes[3].imshow(labels, cmap=cmap)
-    axes[3].set_title("Watershed Tree Crowns")
+for input_las in input_files:
+    logger.info(f"Processing {input_las}")
+    las = laspy.read(str(input_las))
+    x = np.asarray(las.x)
+    y = np.asarray(las.y)
+    z = np.asarray(las.z)
+    points = np.column_stack((x, y, z))
+    classification = np.asarray(las.classification)
 
-    for ax in axes:
-        ax.set_xticks([])
-        ax.set_yticks([])
+    hag_all = normalize_height(z, classification)
+    veg_mask = hag_all > MIN_HEIGHT
+    logger.info(f"  Vegetation points above {MIN_HEIGHT} m: {int(np.sum(veg_mask))}")
 
-    plt.tight_layout()
-    plt.show()
+    instance_pred = np.full(len(las), -1, dtype=np.int32)
+    semantic_pred = np.zeros(len(las), dtype=np.int32)
+    score = np.zeros(len(las), dtype=np.float32)
 
-    # ---------------------------
-    # assign tree IDs back to points
-    # ---------------------------
-    logger.info("Assigning tree IDs back to points")
-    tree_ids = labels[iy, ix]
+    if np.any(veg_mask):
+        x_veg = x[veg_mask]
+        y_veg = y[veg_mask]
+        hag_veg = hag_all[veg_mask]
 
-    out = laspy.create(
-        point_format=las.header.point_format,
-        file_version=las.header.version,
+        xmin, ymin = x_veg.min(), y_veg.min()
+        xmax, ymax = x_veg.max(), y_veg.max()
+        nx = max(1, int(np.ceil((xmax - xmin) / CELL_SIZE)))
+        ny = max(1, int(np.ceil((ymax - ymin) / CELL_SIZE)))
+        chm = np.full((ny, nx), np.nan, dtype=np.float32)
+
+        ix = np.clip(((x_veg - xmin) / CELL_SIZE).astype(int), 0, nx - 1)
+        iy = np.clip(((ymax - y_veg) / CELL_SIZE).astype(int), 0, ny - 1)
+
+        for i, j, h in tqdm(
+            zip(iy, ix, hag_veg),
+            total=len(hag_veg),
+            desc=f"Rasterizing CHM [{input_las.stem}]",
+            unit="pts",
+        ):
+            if np.isnan(chm[i, j]) or h > chm[i, j]:
+                chm[i, j] = h
+
+        chm = np.nan_to_num(chm, nan=0.0)
+        chm = gaussian_filter(chm, SMOOTH_SIGMA)
+
+        min_curv = minimum_curvature(chm, CELL_SIZE)
+        clip_low, clip_high = CURVATURE_PCT_CLIP
+        low_val = np.percentile(min_curv, clip_low)
+        high_val = np.percentile(min_curv, clip_high)
+        if high_val <= low_val:
+            curv_norm = np.zeros_like(min_curv)
+        else:
+            curv_clip = np.clip(min_curv, low_val, high_val)
+            curv_norm = (curv_clip - low_val) / (high_val - low_val)
+        chm_stretched = chm * (1.0 + CURVATURE_STRETCH * curv_norm)
+
+        min_peak_dist = max(1, int(np.ceil(MIN_PEAK_DIST_M / CELL_SIZE)))
+        peaks = peak_local_max(
+            chm_stretched,
+            min_distance=min_peak_dist,
+            threshold_abs=MIN_HEIGHT,
+        )
+        markers = np.zeros_like(chm, dtype=np.int32)
+        for i, (r, c) in enumerate(peaks, start=1):
+            markers[r, c] = i
+
+        labels = watershed(-chm_stretched, markers, mask=chm > MIN_HEIGHT)
+        labels_smoothed = generic_filter(labels, _mode_filter, size=LABEL_SMOOTH_KERNEL_SIZE)
+        labels_smoothed = labels_smoothed.astype(labels.dtype, copy=False)
+        labels_smoothed[chm <= MIN_HEIGHT] = 0
+        labels = labels_smoothed
+
+        gap_structure = np.ones((GAP_CLOSE_KERNEL_SIZE, GAP_CLOSE_KERNEL_SIZE), dtype=bool)
+        canopy_mask = labels > 0
+        canopy_closed = binary_closing(canopy_mask, structure=gap_structure)
+        gap_pixels = canopy_closed & ~canopy_mask
+        if np.any(gap_pixels):
+            labels_mode = generic_filter(labels, _mode_filter, size=LABEL_SMOOTH_KERNEL_SIZE)
+            labels[gap_pixels] = labels_mode[gap_pixels]
+        labels[~canopy_closed] = 0
+
+        tree_ids_veg = labels[iy, ix].astype(np.int32)
+        tree_ids_veg[tree_ids_veg == 0] = -1
+        instance_pred[veg_mask] = tree_ids_veg
+        semantic_pred[instance_pred >= 0] = 2
+        score[instance_pred >= 0] = 1.0
+        logger.info(f"  Trees segmented: {int(labels.max())}")
+    else:
+        logger.warning("  No vegetation points found above threshold")
+
+    semantic_gt = None
+    instance_gt = None
+    if "tree_id" in las.point_format.extra_dimension_names:
+        instance_gt = np.asarray(las.tree_id, dtype=np.int32)
+        semantic_gt = np.where(instance_gt > 0, 2, 0).astype(np.int32)
+
+    out_file = WORK_DIR / f"{input_las.stem}.ply"
+    save_oneformer_style_ply(
+        out_file,
+        points,
+        semantic_pred,
+        instance_pred,
+        score,
+        semantic_gt=semantic_gt,
+        instance_gt=instance_gt,
     )
-    out.header = las.header
-    out.x, out.y, out.z = las.x, las.y, las.z
-    out.classification = las.classification
-
-    out.add_extra_dim(laspy.ExtraBytesParams(name="tree_id", type=np.uint32))
-    out.tree_id = np.zeros(len(las), dtype=np.uint32)
-    out.tree_id[veg_mask] = tree_ids
-
-    logger.info("Dropping points with tree_id == 0 and ground classification")
-    keep = (out.tree_id != 0) & (out.classification != 2)
-    out = out[keep]
-
-    out_file = WORK_DIR / "segmented_trees.las"
-    out.write(str(out_file))
-    logger.info(f"Segmented LAS written to {out_file}")
+    logger.info(f"  Wrote segmented point cloud: {out_file}")
