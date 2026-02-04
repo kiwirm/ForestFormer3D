@@ -8,7 +8,7 @@ custom_imports = dict(imports=['oneformer3d', 'oneformer3d.oneformer3d_speedup_v
 num_channels = 32
 num_instance_classes = 1
 radius=16
-score_th = 0.35
+score_th = 0.10
 chunk = 20_000
 model = dict(
     type='InstanceOnlyOneFormer3D',
@@ -23,7 +23,7 @@ model = dict(
     min_spatial_shape=128,
     train_cfg=dict(),
     test_cfg=dict(
-        topk_insts=500,
+        topk_insts=128,
         inst_score_thr=0.0,
         pan_score_thr=0.0,
         npoint_thr=8,
@@ -37,7 +37,7 @@ model = dict(
         stride=4.0,
         grid_size=0.16,
         num_points=640000,
-        edge_buffer=0.5,
+        edge_buffer=0.0,
         merge_overlap_thr=0.3,
         score_thr=score_th),
     backbone=dict(
@@ -242,7 +242,8 @@ visualizer = dict(
 train_cfg = dict(
     type='EpochBasedTrainLoop',
     max_epochs=3000,
-    val_interval=100)
+    # Effectively disable periodic validation during training.
+    val_interval=100000)
 
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')

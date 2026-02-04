@@ -41,6 +41,11 @@ Optional overrides (if needed):
 - `TEST_LABELED_LAS`
 - `TARGET_CRS`
 - `TREE_ID_COL`
+- `SNAKE_REFINE=1` (optional: refine crown polygon edges into local canopy valleys before labeling)
+- `SNAKE_CELL_SIZE` (default `0.2`)
+- `SNAKE_SEARCH_RADIUS_M` (default `0.6`)
+- `SNAKE_ITERS` (default `20`)
+- `SNAKE_OUT_SHP` (default `data/raw/train_snake.shp`; written from train pass when snake refine is enabled)
 
 ## 3) Training
 
@@ -56,6 +61,38 @@ Resume:
 python tools/training/train.py configs/xyz.py --work-dir work_dirs/xyz --resume
 ```
 
+### Run XYZ training in background
+
+```bash
+mkdir -p work_dirs/xyz
+
+export PYTHONPATH=.
+export CUDA_VISIBLE_DEVICES=0
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+
+nohup python tools/training/train.py \
+  configs/xyz.py \
+  --work-dir work_dirs/xyz \
+  --resume \
+  > work_dirs/xyz/train.log 2>&1 &
+echo $! > work_dirs/xyz/train.pid
+```
+
+Check status/logs:
+
+```bash
+ps -p "$(cat work_dirs/xyz/train.pid)" -o pid=,cmd=
+tail -f work_dirs/xyz/train.log
+```
+
+Stop:
+
+```bash
+kill "$(cat work_dirs/xyz/train.pid)"
+```
+
 ### Train XYZRGB
 
 ```bash
@@ -69,6 +106,23 @@ python tools/training/train.py configs/xyzrgb.py --work-dir work_dirs/xyzrgb --r
 ```
 
 ## 4) Inference + evaluation
+
+### Shared crown preprocessing (watershed + XY-conflation)
+
+Build a shared raster bundle (`CHM`, `CHM gradient`, boundary-aware `cost_surface`) that
+both watershed and active-contour style XY line sliding can use:
+
+```bash
+python watershed/build_shared_surfaces.py \
+  --input-glob 'data/intermediate/test_*.las' \
+  --output-dir data/derived/crown_surfaces
+```
+
+Each output `.npz` includes:
+- `chm`, `chm_smooth`, `chm_stretched`
+- `grad_mag`
+- `cost_surface` (low CHM + high gradient => lower cost near crown boundaries)
+- raster georeferencing metadata (`xmin/ymin/xmax/ymax`, `cell_size`, `nx/ny`)
 
 ### XYZ
 

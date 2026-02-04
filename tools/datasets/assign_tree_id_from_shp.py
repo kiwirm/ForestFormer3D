@@ -2,9 +2,19 @@
 """Assign tree_id to LAS points from polygon GT shapefile."""
 import argparse
 import os
+import sys
+from pathlib import Path
 
 import laspy
 import numpy as np
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent.parent
+WATERSHED_DIR = REPO_ROOT / "watershed"
+if str(WATERSHED_DIR) not in sys.path:
+    sys.path.insert(0, str(WATERSHED_DIR))
+
+from snake_refine import build_snake_surface_from_points, refine_polygons_to_valleys
 
 
 def _require_geopandas():
@@ -53,6 +63,76 @@ def main():
         default=None,
         help="CRS to use for polygon reprojection (e.g., EPSG:2193). "
              "If not set, attempt to read CRS from LAS header.",
+    )
+    parser.add_argument(
+        "--snake-refine",
+        action="store_true",
+        help="Refine polygon edges toward local canopy valleys before point-in-polygon join.",
+    )
+    parser.add_argument(
+        "--snake-out-shp",
+        default=None,
+        help="Optional output path for the (possibly snake-refined) polygons as a shapefile/GeoPackage.",
+    )
+    parser.add_argument(
+        "--snake-cell-size",
+        type=float,
+        default=0.2,
+        help="Raster cell size (m) for snake valley cost surface.",
+    )
+    parser.add_argument(
+        "--snake-min-height",
+        type=float,
+        default=0.5,
+        help="Minimum normalized height (m) for canopy points in snake surface.",
+    )
+    parser.add_argument(
+        "--snake-smooth-sigma",
+        type=float,
+        default=1.0,
+        help="Gaussian smoothing sigma for snake CHM.",
+    )
+    parser.add_argument(
+        "--snake-curvature-stretch",
+        type=float,
+        default=1.0,
+        help="Curvature stretch factor for snake valley surface.",
+    )
+    parser.add_argument(
+        "--snake-iters",
+        type=int,
+        default=20,
+        help="Number of active-contour iterations.",
+    )
+    parser.add_argument(
+        "--snake-search-radius-m",
+        type=float,
+        default=0.6,
+        help="Max movement distance per-vertex normal search (m).",
+    )
+    parser.add_argument(
+        "--snake-samples",
+        type=int,
+        default=11,
+        help="Number of candidate samples per normal search.",
+    )
+    parser.add_argument(
+        "--snake-move-penalty",
+        type=float,
+        default=0.03,
+        help="Quadratic penalty for larger normal offsets.",
+    )
+    parser.add_argument(
+        "--snake-smooth-weight",
+        type=float,
+        default=0.08,
+        help="Penalty encouraging local contour smoothness.",
+    )
+    parser.add_argument(
+        "--snake-relax",
+        type=float,
+        default=0.7,
+        help="Relaxation blend applied each snake iteration.",
     )
     args = parser.parse_args()
 
@@ -105,6 +185,47 @@ def main():
         # No reprojection possible; warn that CRS mismatch will yield no matches
         if polys.crs is not None:
             print(f"Warning: no target CRS specified; GT CRS is {polys.crs}.")
+
+    if args.snake_refine:
+        print("Running snake edge refinement against canopy valley surface...")
+        if hasattr(las, "classification"):
+            cls = np.asarray(las.classification)
+        else:
+            cls = np.zeros(len(las.x), dtype=np.uint8)
+        surfaces = build_snake_surface_from_points(
+            np.asarray(las.x),
+            np.asarray(las.y),
+            np.asarray(las.z),
+            cls,
+            cell_size=args.snake_cell_size,
+            min_height=args.snake_min_height,
+            smooth_sigma=args.snake_smooth_sigma,
+            curvature_stretch=args.snake_curvature_stretch,
+            curvature_pct_clip=(5.0, 95.0),
+        )
+        polys, snake_stats = refine_polygons_to_valleys(
+            polys,
+            surfaces,
+            cell_size=args.snake_cell_size,
+            n_iters=args.snake_iters,
+            search_radius_m=args.snake_search_radius_m,
+            n_samples=args.snake_samples,
+            move_penalty=args.snake_move_penalty,
+            smooth_weight=args.snake_smooth_weight,
+            relax=args.snake_relax,
+        )
+        print(
+            "Snake refine done: "
+            f"polygons={snake_stats.polygons_refined}/{snake_stats.polygons_seen}, "
+            f"rings={snake_stats.rings_refined}, "
+            f"mean_shift={snake_stats.mean_vertex_shift_m:.3f}m, "
+            f"max_shift={snake_stats.max_vertex_shift_m:.3f}m"
+        )
+    if args.snake_out_shp:
+        out_path = Path(args.snake_out_shp)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        polys.to_file(out_path)
+        print(f"Wrote polygons to {out_path}")
     n = len(las.x)
     tree_ids = np.zeros(n, dtype=np.uint32)
 

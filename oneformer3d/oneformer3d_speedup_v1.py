@@ -377,6 +377,101 @@ class ScanNetOneFormer3D(ScanNetOneFormer3DMixin, Base3DDetector):
         """Implement abstract method of Base3DDetector."""
         pass
 
+    @staticmethod
+    def _as_numpy(x):
+        if x is None:
+            return None
+        if isinstance(x, np.ndarray):
+            return x
+        if torch.is_tensor(x):
+            return x.detach().cpu().numpy()
+        return np.asarray(x)
+
+    def _instance_ids_from_pred(self, pred_pts_seg, num_points):
+        masks = self._as_numpy(getattr(pred_pts_seg, 'pts_instance_mask', None))
+        scores = self._as_numpy(getattr(pred_pts_seg, 'instance_scores', None))
+
+        if masks is None or masks.size == 0:
+            return np.full((num_points,), -1, dtype=np.int32), np.zeros((num_points,), dtype=np.float32)
+
+        if masks.ndim != 2:
+            return np.full((num_points,), -1, dtype=np.int32), np.zeros((num_points,), dtype=np.float32)
+
+        # Expected shape is (K, N). Some code paths may carry (N, K).
+        if masks.shape[1] != num_points and masks.shape[0] == num_points:
+            masks = masks.T
+        if masks.shape[1] != num_points:
+            return np.full((num_points,), -1, dtype=np.int32), np.zeros((num_points,), dtype=np.float32)
+
+        k = masks.shape[0]
+        if scores is None or scores.size != k:
+            scores = np.ones((k,), dtype=np.float32)
+        else:
+            scores = scores.astype(np.float32, copy=False)
+
+        masks = masks.astype(bool, copy=False)
+        weighted = masks.astype(np.float32) * scores[:, None]
+        best_idx = weighted.argmax(axis=0)
+        best_score = weighted.max(axis=0)
+
+        inst_pred = np.full((num_points,), -1, dtype=np.int32)
+        valid = best_score > 0
+        inst_pred[valid] = best_idx[valid].astype(np.int32)
+        return inst_pred, best_score.astype(np.float32, copy=False)
+
+    def _dump_prediction_ply(self, points, data_sample):
+        output_dir = self.test_cfg.get('output_dir') if self.test_cfg is not None else None
+        if not output_dir:
+            return
+
+        pred_pts_seg = getattr(data_sample, 'pred_pts_seg', None)
+        if pred_pts_seg is None:
+            return
+
+        pts_np = self._as_numpy(points)
+        if pts_np is None or pts_np.shape[0] == 0:
+            return
+        xyz = pts_np[:, :3].astype(np.float32, copy=False)
+        n = xyz.shape[0]
+
+        inst_pred, score = self._instance_ids_from_pred(pred_pts_seg, n)
+        sem_pred = (inst_pred >= 0).astype(np.int32)
+
+        sem_gt = None
+        ins_gt = None
+        ann = getattr(data_sample, 'eval_ann_info', None)
+        if isinstance(ann, dict):
+            sem_gt = self._as_numpy(ann.get('pts_semantic_mask', None))
+            ins_gt = self._as_numpy(ann.get('pts_instance_mask', None))
+            if sem_gt is not None and sem_gt.shape[0] != n:
+                sem_gt = None
+            if ins_gt is not None and ins_gt.shape[0] != n:
+                ins_gt = None
+
+        dtype = [
+            ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
+            ('semantic_pred', 'i4'), ('instance_pred', 'i4'), ('score', 'f4')
+        ]
+        if sem_gt is not None and ins_gt is not None:
+            dtype += [('semantic_gt', 'i4'), ('instance_gt', 'i4')]
+
+        vertex = np.empty((n,), dtype=dtype)
+        vertex['x'] = xyz[:, 0]
+        vertex['y'] = xyz[:, 1]
+        vertex['z'] = xyz[:, 2]
+        vertex['semantic_pred'] = sem_pred
+        vertex['instance_pred'] = inst_pred
+        vertex['score'] = score
+        if sem_gt is not None and ins_gt is not None:
+            vertex['semantic_gt'] = sem_gt.astype(np.int32, copy=False)
+            vertex['instance_gt'] = ins_gt.astype(np.int32, copy=False)
+
+        lidar_path = getattr(data_sample, 'lidar_path', 'scene')
+        scene_name = os.path.splitext(os.path.basename(lidar_path))[0]
+        os.makedirs(output_dir, exist_ok=True)
+        ply_path = os.path.join(output_dir, f'{scene_name}.ply')
+        PlyData([PlyElement.describe(vertex, 'vertex')], text=True).write(ply_path)
+
     def loss(self, batch_inputs_dict, batch_data_samples, **kwargs):
         """Calculate losses from a batch of inputs dict and data samples.
 
@@ -4557,6 +4652,97 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
             initialization. Defaults to None.
     """
 
+    @staticmethod
+    def _as_numpy(x):
+        if x is None:
+            return None
+        if isinstance(x, np.ndarray):
+            return x
+        if torch.is_tensor(x):
+            return x.detach().cpu().numpy()
+        return np.asarray(x)
+
+    def _instance_ids_from_pred(self, pred_pts_seg, num_points):
+        masks = self._as_numpy(getattr(pred_pts_seg, 'pts_instance_mask', None))
+        scores = self._as_numpy(getattr(pred_pts_seg, 'instance_scores', None))
+
+        if masks is None or masks.size == 0 or masks.ndim != 2:
+            return np.full((num_points,), -1, dtype=np.int32), np.zeros((num_points,), dtype=np.float32)
+
+        if masks.shape[1] != num_points and masks.shape[0] == num_points:
+            masks = masks.T
+        if masks.shape[1] != num_points:
+            return np.full((num_points,), -1, dtype=np.int32), np.zeros((num_points,), dtype=np.float32)
+
+        k = masks.shape[0]
+        if scores is None or scores.size != k:
+            scores = np.ones((k,), dtype=np.float32)
+        else:
+            scores = scores.astype(np.float32, copy=False)
+
+        masks = masks.astype(bool, copy=False)
+        weighted = masks.astype(np.float32) * scores[:, None]
+        best_idx = weighted.argmax(axis=0)
+        best_score = weighted.max(axis=0)
+
+        inst_pred = np.full((num_points,), -1, dtype=np.int32)
+        valid = best_score > 0
+        inst_pred[valid] = best_idx[valid].astype(np.int32)
+        return inst_pred, best_score.astype(np.float32, copy=False)
+
+    def _dump_prediction_ply(self, points, data_sample):
+        output_dir = self.test_cfg.get('output_dir') if self.test_cfg is not None else None
+        if not output_dir:
+            return
+
+        pred_pts_seg = getattr(data_sample, 'pred_pts_seg', None)
+        if pred_pts_seg is None:
+            return
+
+        pts_np = self._as_numpy(points)
+        if pts_np is None or pts_np.shape[0] == 0:
+            return
+        xyz = pts_np[:, :3].astype(np.float32, copy=False)
+        n = xyz.shape[0]
+
+        inst_pred, score = self._instance_ids_from_pred(pred_pts_seg, n)
+        sem_pred = (inst_pred >= 0).astype(np.int32)
+
+        sem_gt = None
+        ins_gt = None
+        ann = getattr(data_sample, 'eval_ann_info', None)
+        if isinstance(ann, dict):
+            sem_gt = self._as_numpy(ann.get('pts_semantic_mask', None))
+            ins_gt = self._as_numpy(ann.get('pts_instance_mask', None))
+            if sem_gt is not None and sem_gt.shape[0] != n:
+                sem_gt = None
+            if ins_gt is not None and ins_gt.shape[0] != n:
+                ins_gt = None
+
+        dtype = [
+            ('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
+            ('semantic_pred', 'i4'), ('instance_pred', 'i4'), ('score', 'f4')
+        ]
+        if sem_gt is not None and ins_gt is not None:
+            dtype += [('semantic_gt', 'i4'), ('instance_gt', 'i4')]
+
+        vertex = np.empty((n,), dtype=dtype)
+        vertex['x'] = xyz[:, 0]
+        vertex['y'] = xyz[:, 1]
+        vertex['z'] = xyz[:, 2]
+        vertex['semantic_pred'] = sem_pred
+        vertex['instance_pred'] = inst_pred
+        vertex['score'] = score
+        if sem_gt is not None and ins_gt is not None:
+            vertex['semantic_gt'] = sem_gt.astype(np.int32, copy=False)
+            vertex['instance_gt'] = ins_gt.astype(np.int32, copy=False)
+
+        lidar_path = getattr(data_sample, 'lidar_path', 'scene')
+        scene_name = os.path.splitext(os.path.basename(lidar_path))[0]
+        os.makedirs(output_dir, exist_ok=True)
+        ply_path = os.path.join(output_dir, f'{scene_name}.ply')
+        PlyData([PlyElement.describe(vertex, 'vertex')], text=True).write(ply_path)
+
     def __init__(self,
                  in_channels,
                  num_channels,
@@ -4858,6 +5044,7 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
                 instance_scores=pred_scores)
 
             batch_data_samples[0].pred_pts_seg = point_data
+            self._dump_prediction_ply(original_points, batch_data_samples[0])
             return batch_data_samples
 
         coordinates, features, inverse_mapping, spatial_shape = self.collate(
@@ -4876,6 +5063,7 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
 
         for i, data_sample in enumerate(batch_data_samples):
             data_sample.pred_pts_seg = results_list[i]
+            self._dump_prediction_ply(batch_inputs_dict['points'][i], data_sample)
         return batch_data_samples
 
     def predict_by_feat(self, out, superpoints, scene_names):
@@ -4900,6 +5088,15 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
 
         scores = F.softmax(pred_labels[0], dim=-1)[:, :-1]
         scores *= pred_scores[0]
+        if os.environ.get('FF3D_DEBUG_SCORES') == '1':
+            try:
+                s_det = scores.detach()
+                print(
+                    f"[FF3D_DEBUG_SCORES] pre-topk min={float(s_det.min()):.6f} "
+                    f"max={float(s_det.max()):.6f} mean={float(s_det.mean()):.6f}"
+                )
+            except Exception:
+                pass
 
         if self.prefix_1dataset in scene_name:
             labels = torch.arange(
@@ -4951,6 +5148,8 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
         scores = scores[score_mask]
         labels = labels[score_mask]
         mask_pred = mask_pred[score_mask]
+        if os.environ.get('FF3D_DEBUG_SCORES') == '1':
+            print(f"[FF3D_DEBUG_SCORES] after score_thr kept={int(score_mask.sum())}")
 
         # npoint_thr
         mask_pointnum = mask_pred.sum(1)
@@ -4958,6 +5157,8 @@ class InstanceOnlyOneFormer3D(Base3DDetector):
         scores = scores[npoint_mask]
         labels = labels[npoint_mask]
         mask_pred = mask_pred[npoint_mask]
+        if os.environ.get('FF3D_DEBUG_SCORES') == '1':
+            print(f"[FF3D_DEBUG_SCORES] after npoint_thr kept={int(npoint_mask.sum())}")
 
         return [
             PointData(

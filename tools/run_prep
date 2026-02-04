@@ -28,6 +28,11 @@ TEST_LABELED_LAS="${TEST_LABELED_LAS:-$ROOT_DIR/data/intermediate/test.las}"
 
 TARGET_CRS="${TARGET_CRS:-EPSG:2134}"
 TREE_ID_COL="${TREE_ID_COL:-tree_id}"
+SNAKE_REFINE="${SNAKE_REFINE:-0}"
+SNAKE_CELL_SIZE="${SNAKE_CELL_SIZE:-0.2}"
+SNAKE_SEARCH_RADIUS_M="${SNAKE_SEARCH_RADIUS_M:-0.6}"
+SNAKE_ITERS="${SNAKE_ITERS:-20}"
+SNAKE_OUT_SHP="${SNAKE_OUT_SHP:-$ROOT_DIR/data/raw/train_snake.shp}"
 TRAIN_SCENE_NAME="${TRAIN_SCENE_NAME:-train}"
 TEST_SCENE_NAME="${TEST_SCENE_NAME:-test}"
 TRAIN_SPLITS_DIR="$ROOT_DIR/data/splits/train"
@@ -53,13 +58,27 @@ mkdir -p \
   "$PROCESSED_SEMANTIC_MASK_DIR" \
   "$INTERMEDIATE_DIR"
 
+SNAKE_ARGS=()
+SNAKE_ARGS_TRAIN=()
+if [[ "$SNAKE_REFINE" == "1" ]]; then
+  SNAKE_ARGS=(
+    --snake-refine
+    --snake-cell-size "$SNAKE_CELL_SIZE"
+    --snake-search-radius-m "$SNAKE_SEARCH_RADIUS_M"
+    --snake-iters "$SNAKE_ITERS"
+  )
+  SNAKE_ARGS_TRAIN=("${SNAKE_ARGS[@]}" --snake-out-shp "$SNAKE_OUT_SHP")
+  echo "Snake refinement enabled."
+fi
+
 # 1) Assign tree_id and convert train LAS -> single train scene PLY
 python tools/datasets/assign_tree_id_from_shp.py \
   --las "$TRAIN_LAS_INPUT" \
   --gt "$VECTORS_SHAPE" \
   --out "$TRAIN_LABELED_LAS" \
   --tree-id-col "$TREE_ID_COL" \
-  --target-crs "$TARGET_CRS"
+  --target-crs "$TARGET_CRS" \
+  "${SNAKE_ARGS_TRAIN[@]}"
 
 python tools/datasets/las_to_ply.py \
   "$TRAIN_LABELED_LAS" \
@@ -75,7 +94,8 @@ if [[ -f "$TEST_LAS_INPUT" ]]; then
     --gt "$VECTORS_SHAPE" \
     --out "$TEST_LABELED_LAS" \
     --tree-id-col "$TREE_ID_COL" \
-    --target-crs "$TARGET_CRS"
+    --target-crs "$TARGET_CRS" \
+    "${SNAKE_ARGS[@]}"
 
   python tools/datasets/las_to_ply.py \
     "$TEST_LABELED_LAS" \

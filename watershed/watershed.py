@@ -6,10 +6,11 @@ from pathlib import Path
 import laspy
 import numpy as np
 from plyfile import PlyData, PlyElement
-from scipy.ndimage import binary_closing, gaussian_filter, generic_filter
+from scipy.ndimage import binary_closing, generic_filter
 from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
-from tqdm import tqdm
+
+from shared_surfaces import build_shared_surfaces
 
 # ---------------------------
 # logging setup
@@ -92,26 +93,6 @@ CURVATURE_STRETCH = ARGS.curvature_stretch
 CURVATURE_PCT_CLIP = (ARGS.curvature_pct_clip_low, ARGS.curvature_pct_clip_high)
 LABEL_SMOOTH_KERNEL_SIZE = max(1, ARGS.label_smooth_kernel_size)
 GAP_CLOSE_KERNEL_SIZE = max(1, ARGS.gap_close_kernel_size)
-
-
-def minimum_curvature(surface, cell_size):
-    dy = cell_size
-    dx = cell_size
-    zy, zx = np.gradient(surface, dy, dx)
-    zyy, zyx = np.gradient(zy, dy, dx)
-    zxy, zxx = np.gradient(zx, dy, dx)
-    zxy = 0.5 * (zxy + zyx)
-    denom = 1.0 + zx * zx + zy * zy
-    denom_sqrt = np.sqrt(denom)
-    denom_32 = denom * denom_sqrt
-    mean_curv = (
-        (1.0 + zy * zy) * zxx - 2.0 * zx * zy * zxy + (1.0 + zx * zx) * zyy
-    ) / (2.0 * denom_32)
-    gauss_curv = (zxx * zyy - zxy * zxy) / (denom * denom)
-    discriminant = np.maximum(mean_curv * mean_curv - gauss_curv, 0.0)
-    k1 = mean_curv + np.sqrt(discriminant)
-    k2 = mean_curv - np.sqrt(discriminant)
-    return np.minimum(k1, k2)
 
 
 logger.info("Loading LAS file")
@@ -206,38 +187,20 @@ for input_las in input_files:
         x_veg = x[veg_mask]
         y_veg = y[veg_mask]
         hag_veg = hag_all[veg_mask]
-
-        xmin, ymin = x_veg.min(), y_veg.min()
-        xmax, ymax = x_veg.max(), y_veg.max()
-        nx = max(1, int(np.ceil((xmax - xmin) / CELL_SIZE)))
-        ny = max(1, int(np.ceil((ymax - ymin) / CELL_SIZE)))
-        chm = np.full((ny, nx), np.nan, dtype=np.float32)
-
-        ix = np.clip(((x_veg - xmin) / CELL_SIZE).astype(int), 0, nx - 1)
-        iy = np.clip(((ymax - y_veg) / CELL_SIZE).astype(int), 0, ny - 1)
-
-        for i, j, h in tqdm(
-            zip(iy, ix, hag_veg),
-            total=len(hag_veg),
-            desc=f"Rasterizing CHM [{input_las.stem}]",
-            unit="pts",
-        ):
-            if np.isnan(chm[i, j]) or h > chm[i, j]:
-                chm[i, j] = h
-
-        chm = np.nan_to_num(chm, nan=0.0)
-        chm = gaussian_filter(chm, SMOOTH_SIGMA)
-
-        min_curv = minimum_curvature(chm, CELL_SIZE)
-        clip_low, clip_high = CURVATURE_PCT_CLIP
-        low_val = np.percentile(min_curv, clip_low)
-        high_val = np.percentile(min_curv, clip_high)
-        if high_val <= low_val:
-            curv_norm = np.zeros_like(min_curv)
-        else:
-            curv_clip = np.clip(min_curv, low_val, high_val)
-            curv_norm = (curv_clip - low_val) / (high_val - low_val)
-        chm_stretched = chm * (1.0 + CURVATURE_STRETCH * curv_norm)
+        surfaces = build_shared_surfaces(
+            x_veg,
+            y_veg,
+            hag_veg,
+            cell_size=CELL_SIZE,
+            smooth_sigma=SMOOTH_SIGMA,
+            min_height=MIN_HEIGHT,
+            curvature_stretch=CURVATURE_STRETCH,
+            curvature_pct_clip=CURVATURE_PCT_CLIP,
+        )
+        chm = surfaces.chm_smooth
+        chm_stretched = surfaces.chm_stretched
+        ix = surfaces.ix
+        iy = surfaces.iy
 
         min_peak_dist = max(1, int(np.ceil(MIN_PEAK_DIST_M / CELL_SIZE)))
         peaks = peak_local_max(

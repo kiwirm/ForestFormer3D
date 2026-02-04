@@ -112,11 +112,12 @@ def main():
         cfg.merge_from_dict(args.cfg_options)
 
     # Ensure the provided checkpoint is loaded for testing.
-    cfg.load_from = args.checkpoint
+    # Default to manual loading because spconv kernel weight layouts can vary
+    # across environments and trigger widespread shape mismatch warnings.
+    # Set FF3D_MANUAL_LOAD=0 to force mmengine's native checkpoint loader.
+    use_manual_load = os.environ.get('FF3D_MANUAL_LOAD', '1') != '0'
+    cfg.load_from = args.checkpoint if not use_manual_load else None
     cfg.resume = False
-    if os.environ.get('FF3D_MANUAL_LOAD') == '1':
-        # We'll load weights manually after building the runner.
-        cfg.load_from = None
 
     if os.environ.get('FF3D_DEBUG_CKPT') == '1':
         try:
@@ -172,7 +173,7 @@ def main():
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
 
-    if os.environ.get('FF3D_MANUAL_LOAD') == '1':
+    if use_manual_load:
         ckpt = torch.load(args.checkpoint, map_location='cpu')
         sd = ckpt.get('state_dict', ckpt.get('model', ckpt))
         model_sd = runner.model.state_dict()
